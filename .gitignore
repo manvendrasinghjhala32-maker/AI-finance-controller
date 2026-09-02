@@ -1,12 +1,25 @@
-# Environment
+# Environment & Secrets
 .env
+.env.local
 venv/
+env/
 __pycache__/
 *.pyc
+.pytest_cache/
 
-# Output
+# Local Session & Runtime Cache
+data/.session_cache/
+
+# Frontend Build & Dependencies
+frontend/node_modules/
+frontend/dist/
+
+# Output & Temporary Files
 output/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.DS_Store
+

@@ -402,11 +402,17 @@ def normalize_dataframe_columns(df: pd.DataFrame, schema_type: str, source_name:
         if "amount" in df.columns:
             df["amount"] = clean_currency_series(df["amount"])
         else:
+            msg = f"Missing mandatory 'amount' column in {source_name or 'bank statement'}; defaulting to 0.0 with warning."
+            logger.warning(msg)
+            df.attrs["ingestion_warning"] = msg
             df["amount"] = 0.0
 
         if "date" in df.columns:
             df["date"] = smart_parse_dates(df["date"])
         else:
+            msg = f"Missing mandatory 'date' column in {source_name or 'bank statement'}; defaulting to current date with warning."
+            logger.warning(msg)
+            df.attrs["ingestion_warning"] = msg
             df["date"] = datetime.now().date()
 
     elif schema_type == "invoice":
@@ -442,11 +448,17 @@ def normalize_dataframe_columns(df: pd.DataFrame, schema_type: str, source_name:
         if "amount" in df.columns:
             df["amount"] = clean_currency_series(df["amount"])
         else:
+            msg = f"Missing mandatory 'amount' column in {source_name or 'invoice ledger'}; defaulting to 0.0 with warning."
+            logger.warning(msg)
+            df.attrs["ingestion_warning"] = msg
             df["amount"] = 0.0
 
         if "date" in df.columns:
             df["date"] = smart_parse_dates(df["date"])
         else:
+            msg = f"Missing mandatory 'date' column in {source_name or 'invoice ledger'}; defaulting to current date with warning."
+            logger.warning(msg)
+            df.attrs["ingestion_warning"] = msg
             df["date"] = datetime.now().date()
 
     elif schema_type == "payment":
@@ -468,6 +480,9 @@ def normalize_dataframe_columns(df: pd.DataFrame, schema_type: str, source_name:
         if "amount" in df.columns:
             df["amount"] = clean_currency_series(df["amount"])
         else:
+            msg = f"Missing mandatory 'amount' column in {source_name or 'payment settlement file'}; defaulting to 0.0 with warning."
+            logger.warning(msg)
+            df.attrs["ingestion_warning"] = msg
             df["amount"] = 0.0
 
         if "status" not in df.columns:

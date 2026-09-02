@@ -126,3 +126,52 @@ def test_export_endpoints():
         res = client.get(f"/api/export/{rtype}")
         assert res.status_code == 200
         assert "text/csv" in res.headers["content-type"]
+
+
+def test_export_adjustments_endpoint():
+    # Ensure a resolved item exists
+    tx_id = "TX0002"
+    client.post("/api/resolve", json={
+        "transaction_id": tx_id,
+        "action": "post_fee_adjustment",
+        "note": "Fee variance booked to GL-6150",
+    })
+
+    res = client.get("/api/export/adjustments")
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["content-type"]
+    content = res.text
+    assert "transaction_id" in content
+    assert "resolution_action" in content
+    assert "TX0002" in content
+    assert "post_fee_adjustment" in content
+
+
+def test_reconcile_dynamic_tolerances_impact():
+    """Verify that changing tolerances in API actually changes classification counts."""
+    # Set tight tolerances
+    res_tight = client.post("/api/reconcile", json={
+        "amount_tolerance": 0,
+        "date_tolerance": 0,
+        "fuzzy_threshold": 95,
+    })
+    assert res_tight.status_code == 200
+    tight_matched = res_tight.json()["summary"]["matched_count"]
+
+    # Set loose tolerances
+    res_loose = client.post("/api/reconcile", json={
+        "amount_tolerance": 1000,
+        "date_tolerance": 10,
+        "fuzzy_threshold": 50,
+    })
+    assert res_loose.status_code == 200
+    loose_matched = res_loose.json()["summary"]["matched_count"]
+
+    assert loose_matched > tight_matched, f"Loose tolerance matches ({loose_matched}) should exceed tight ({tight_matched})"
+
+    # Reset back to default benchmark tolerances
+    client.post("/api/reconcile", json={
+        "amount_tolerance": 50,
+        "date_tolerance": 2,
+        "fuzzy_threshold": 60,
+    })

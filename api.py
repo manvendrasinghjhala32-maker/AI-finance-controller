@@ -221,7 +221,15 @@ def run_pipeline(
         store.bank_df, store.invoices_df, store.payments_df, store.gt_df = load_all_data(verbose=False)
 
     # Reconcile using active tolerances
-    store.results = reconcile(store.bank_df, store.invoices_df, store.payments_df, verbose=False)
+    store.results = reconcile(
+        store.bank_df,
+        store.invoices_df,
+        store.payments_df,
+        verbose=False,
+        amount_tolerance=float(store.tolerances.get("amount_tolerance", AMOUNT_TOLERANCE)),
+        date_tolerance=int(store.tolerances.get("date_tolerance", DATE_TOLERANCE_DAYS)),
+        fuzzy_threshold=float(store.tolerances.get("fuzzy_threshold", FUZZY_MATCH_THRESHOLD)),
+    )
 
     if store.gt_df is not None:
         store.metrics = measure_accuracy(store.results, store.gt_df, verbose=False)
@@ -597,23 +605,45 @@ def export_csv_report(report_type: str):
         df = df[df["status"] == STATUS_DUPLICATE]
         filename = "duplicates_report.csv"
     elif report_type == "adjustments":
+        bank_lookup = {}
+        if store.bank_df is not None and "transaction_id" in store.bank_df.columns:
+            for _, b_row in store.bank_df.iterrows():
+                bank_lookup[str(b_row["transaction_id"]).strip()] = b_row
+
+        inv_lookup = {}
+        if store.invoices_df is not None and "invoice_id" in store.invoices_df.columns:
+            for _, i_row in store.invoices_df.iterrows():
+                inv_lookup[str(i_row["invoice_id"]).strip()] = i_row
+
         rows = []
         for r in (store.results or []):
             tx_id = r.transaction_id
             if tx_id in store.resolved_overrides:
+                b_row = bank_lookup.get(str(tx_id).strip())
+                i_row = inv_lookup.get(str(r.invoice_id).strip()) if r.invoice_id else None
+                
+                b_amt = float(b_row["amount"]) if b_row is not None and "amount" in b_row else None
+                b_date = str(b_row["date"]) if b_row is not None and "date" in b_row else ""
+                i_amt = float(i_row["amount"]) if i_row is not None and "amount" in i_row else None
+                
                 res = store.resolved_overrides[tx_id]
                 rows.append({
                     "transaction_id": tx_id,
-                    "date": str(r.date) if r.date else "",
-                    "original_status": r.status,
-                    "bank_amount": r.bank_amount,
-                    "invoice_amount": r.invoice_amount,
+                    "date": b_date,
+                    "bank_amount": b_amt,
+                    "invoice_id": r.invoice_id or "",
+                    "invoice_amount": i_amt,
                     "amount_delta": r.amount_delta,
-                    "resolution_action": res.get("action"),
-                    "resolution_note": res.get("note"),
-                    "resolved_at": res.get("resolved_at"),
+                    "status": r.status,
+                    "reason": r.reason,
+                    "resolution_action": res.get("action", ""),
+                    "resolution_note": res.get("note", ""),
+                    "resolved_at": res.get("resolved_at", ""),
                 })
-        df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["transaction_id", "date", "original_status", "bank_amount", "invoice_amount", "amount_delta", "resolution_action", "resolution_note", "resolved_at"])
+        df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=[
+            "transaction_id", "date", "bank_amount", "invoice_id", "invoice_amount", 
+            "amount_delta", "status", "reason", "resolution_action", "resolution_note", "resolved_at"
+        ])
         filename = "dataset_adjustments_audit_log.csv"
     elif report_type == "gl_entries":
         df = store.journal_entries if store.journal_entries is not None else pd.DataFrame()

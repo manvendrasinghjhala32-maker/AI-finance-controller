@@ -246,3 +246,35 @@ class TestHoldoutReconciliation:
         assert res_map["BL-006"].invoice_id == "INV-9006"
         assert res_map["BL-011"].invoice_id == "INV-9011"
         assert res_map["BL-014"].invoice_id == "INV-9014"
+
+
+class TestRuntimeTolerances:
+
+    def test_runtime_amount_tolerance_reclassifies(self, data):
+        """Increasing amount tolerance reclassifies AMOUNT_MISMATCH to MATCH."""
+        bank, invoices, payments, _ = data
+        
+        # Default run: 15 AMOUNT_MISMATCH
+        res_default = reconcile(bank, invoices, payments, verbose=False, amount_tolerance=50.0)
+        mismatches_default = [r for r in res_default if r.status == STATUS_AMOUNT_MISMATCH]
+        assert len(mismatches_default) == 15
+
+        # High tolerance: absorbs small fee differences
+        res_high = reconcile(bank, invoices, payments, verbose=False, amount_tolerance=500.0)
+        matches_high = [r for r in res_high if r.status == STATUS_MATCH]
+        matches_default = [r for r in res_default if r.status == STATUS_MATCH]
+        assert len(matches_high) > len(matches_default)
+
+    def test_runtime_date_tolerance_reclassifies(self, data):
+        """Increasing date tolerance reclassifies DATE_MISMATCH to MATCH."""
+        bank, invoices, payments, _ = data
+        
+        # Strict date (0 days)
+        res_strict = reconcile(bank, invoices, payments, verbose=False, date_tolerance=0)
+        date_mismatches_strict = [r for r in res_strict if r.status == STATUS_DATE_MISMATCH]
+
+        # Relaxed date (10 days)
+        res_relaxed = reconcile(bank, invoices, payments, verbose=False, date_tolerance=10)
+        date_mismatches_relaxed = [r for r in res_relaxed if r.status == STATUS_DATE_MISMATCH]
+
+        assert len(date_mismatches_strict) > len(date_mismatches_relaxed)

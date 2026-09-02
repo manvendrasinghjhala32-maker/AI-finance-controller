@@ -53,11 +53,11 @@ export function GLEntriesView({ onExport }) {
               Accounting Records
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 font-semibold">
-              Balanced Double-Entry
+              Proposed Double-Entry Adjustments
             </span>
           </div>
           <p className="text-xs text-slate-400 font-mono mt-0.5">
-            Double-entry bookkeeping adjustments ready to export to Excel / QuickBooks / Zoho / Tally
+            Proposed double-entry accounting adjustments requiring human review and approval before posting
           </p>
         </div>
 

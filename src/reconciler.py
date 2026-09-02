@@ -119,6 +119,8 @@ def match_by_reference(
     transaction: pd.Series,
     invoices: pd.DataFrame,
     matched_invoices: Optional[set] = None,
+    amount_tolerance: float = AMOUNT_TOLERANCE,
+    fuzzy_threshold: float = FUZZY_MATCH_THRESHOLD,
 ) -> Optional[pd.Series]:
     """
     Step 2: Find the matching invoice using multi-tier reference & composite candidate matching.
@@ -171,10 +173,10 @@ def match_by_reference(
             continue
         inv_amt = float(inv_row.get("amount", 0.0))
         amt_delta = abs(bank_amt - inv_amt)
-        if amt_delta <= AMOUNT_TOLERANCE:
+        if amt_delta <= amount_tolerance:
             inv_cust = str(inv_row.get("customer", ""))
             sim = compute_merchant_similarity(bank_desc, inv_cust)
-            if sim >= FUZZY_MATCH_THRESHOLD:
+            if sim >= fuzzy_threshold:
                 inv_date = inv_row.get("date")
                 days_diff = 0
                 if bank_date and inv_date and isinstance(bank_date, date) and isinstance(inv_date, date):
@@ -186,7 +188,7 @@ def match_by_reference(
         return candidates[0][0]
     elif len(candidates) > 1:
         candidates.sort(key=lambda x: (-x[1], x[2]))
-        if candidates[0][1] >= max(70.0, float(FUZZY_MATCH_THRESHOLD)):
+        if candidates[0][1] >= max(70.0, float(fuzzy_threshold)):
             return candidates[0][0]
 
     return None
@@ -347,6 +349,9 @@ def classify_transaction(
     invoices: pd.DataFrame,
     payments: pd.DataFrame,
     matched_invoices: Optional[set] = None,
+    amount_tolerance: float = AMOUNT_TOLERANCE,
+    date_tolerance: int = DATE_TOLERANCE_DAYS,
+    fuzzy_threshold: float = FUZZY_MATCH_THRESHOLD,
 ) -> ReconciliationResult:
     """
     Step 7: Run the full classification pipeline for one bank transaction.
@@ -371,7 +376,13 @@ def classify_transaction(
             reason=f"Reference {reference} matches multiple invoices",
         )
 
-    invoice = match_by_reference(transaction, invoices, matched_invoices=matched_invoices)
+    invoice = match_by_reference(
+        transaction,
+        invoices,
+        matched_invoices=matched_invoices,
+        amount_tolerance=amount_tolerance,
+        fuzzy_threshold=fuzzy_threshold,
+    )
 
     if invoice is None:
         # Look up payment for additional context
@@ -390,12 +401,12 @@ def classify_transaction(
 
     # Step 3: Amount comparison
     amounts_match, amount_delta = compare_amounts(
-        transaction["amount"], invoice["amount"]
+        transaction["amount"], invoice["amount"], tolerance=amount_tolerance
     )
 
     # Step 4: Date comparison
     dates_match, date_delta = compare_dates(
-        transaction["date"], invoice["date"]
+        transaction["date"], invoice["date"], tolerance_days=date_tolerance
     )
 
     # Step 5: Merchant similarity
@@ -460,6 +471,9 @@ def reconcile(
     invoices: pd.DataFrame,
     payments: pd.DataFrame,
     verbose: bool = True,
+    amount_tolerance: float = AMOUNT_TOLERANCE,
+    date_tolerance: int = DATE_TOLERANCE_DAYS,
+    fuzzy_threshold: float = FUZZY_MATCH_THRESHOLD,
 ) -> List[ReconciliationResult]:
     """
     Run the full reconciliation pipeline on the entire batch.
@@ -482,7 +496,15 @@ def reconcile(
     matched_invoices = set()
 
     for _, transaction in clean_bank.iterrows():
-        result = classify_transaction(transaction, invoices, payments, matched_invoices=matched_invoices)
+        result = classify_transaction(
+            transaction,
+            invoices,
+            payments,
+            matched_invoices=matched_invoices,
+            amount_tolerance=amount_tolerance,
+            date_tolerance=date_tolerance,
+            fuzzy_threshold=fuzzy_threshold,
+        )
         if result.invoice_id and result.status == STATUS_MATCH:
             matched_invoices.add(result.invoice_id)
         results.append(result)

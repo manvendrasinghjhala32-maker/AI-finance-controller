@@ -54,11 +54,11 @@ export function ForecastView({ onExport }) {
               Cash Forecast
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 font-semibold">
-              30-Day Money Estimate
+              30-Day Scenario-Based Forecast
             </span>
           </div>
           <p className="text-xs text-slate-400 font-mono mt-0.5">
-            Estimated money coming in and going out over the next 30 days based on past payment speeds
+            30-day scenario-based liquidity projection using historical payment patterns and scenario assumptions
           </p>
         </div>
 
