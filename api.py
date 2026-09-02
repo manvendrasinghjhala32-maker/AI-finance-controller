@@ -93,6 +93,7 @@ class StateStore:
         self.explanations = None
         self.executive_summary = None
         self.dataset_label: Optional[str] = None
+        self.ingestion_warnings: List[str] = []
         self.resolved_overrides: Dict[str, Dict[str, Any]] = {}
         self.tolerances = {
             "amount_tolerance": AMOUNT_TOLERANCE,
@@ -457,7 +458,7 @@ def get_dashboard_data():
             "clean_total": clean_total,
             "match_rate": match_rate,
             "exceptions_count": exceptions_count,
-            "accuracy_percentage": store.metrics["accuracy"] if (store.metrics and "accuracy" in store.metrics) else match_rate,
+            "accuracy_percentage": store.metrics["accuracy"] if (store.metrics and store.metrics.get("matches_dataset", True) and "accuracy" in store.metrics) else match_rate,
             "cash_position": store.cash_position,
             "risk_summary": store.risk_assessment.get("risk_breakdown") if store.risk_assessment else {},
             "average_risk_score": store.risk_assessment.get("average_risk_score") if store.risk_assessment else 0,
@@ -467,7 +468,9 @@ def get_dashboard_data():
                 f"requiring automated adjustments and review."
             ),
             "tolerances": store.tolerances,
+            "ingestion_warnings": store.ingestion_warnings,
         },
+        "metrics": store.metrics,
         "ground_truth_metrics": store.metrics,
         "recent_insights": recent_insights,
         "records": records,
@@ -644,15 +647,15 @@ async def upload_custom_files(
         i_content = await invoices_file.read()
 
         raw_b = read_tabular_file(b_content, bank_file.filename)
-        bank_df = normalize_dataframe_columns(raw_b, "bank")
+        bank_df = normalize_dataframe_columns(raw_b, "bank", source_name=bank_file.filename)
 
         raw_i = read_tabular_file(i_content, invoices_file.filename)
-        invoices_df = normalize_dataframe_columns(raw_i, "invoice")
+        invoices_df = normalize_dataframe_columns(raw_i, "invoice", source_name=invoices_file.filename)
 
         if payments_file:
             p_content = await payments_file.read()
             raw_p = read_tabular_file(p_content, payments_file.filename)
-            payments_df = normalize_dataframe_columns(raw_p, "payment")
+            payments_df = normalize_dataframe_columns(raw_p, "payment", source_name=payments_file.filename)
         else:
             payments_df = synthesize_default_payments(bank_df)
 
@@ -664,10 +667,19 @@ async def upload_custom_files(
             if "expected_invoice_id" in gt_df.columns:
                 gt_df["expected_invoice_id"] = gt_df["expected_invoice_id"].fillna("")
 
+        warnings = []
+        if "ingestion_warning" in getattr(bank_df, "attrs", {}):
+            warnings.append(bank_df.attrs["ingestion_warning"])
+        if "ingestion_warning" in getattr(invoices_df, "attrs", {}):
+            warnings.append(invoices_df.attrs["ingestion_warning"])
+        if payments_file and "ingestion_warning" in getattr(payments_df, "attrs", {}):
+            warnings.append(payments_df.attrs["ingestion_warning"])
+
         store.bank_df = bank_df
         store.invoices_df = invoices_df
         store.payments_df = payments_df
         store.gt_df = gt_df
+        store.ingestion_warnings = warnings
         store.resolved_overrides.clear()
         store.explanations = None
         store.executive_summary = None
@@ -678,6 +690,28 @@ async def upload_custom_files(
         return get_dashboard_data()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse uploaded files: {str(e)}")
+
+
+@app.post("/api/upload/ground_truth")
+async def upload_ground_truth_file(
+    ground_truth_file: UploadFile = File(...),
+):
+    try:
+        if store.bank_df is None or store.invoices_df is None:
+            raise HTTPException(status_code=400, detail="Please upload bank statements and invoices first.")
+        
+        gt_content = await ground_truth_file.read()
+        raw_gt = read_tabular_file(gt_content, ground_truth_file.filename)
+        gt_df = raw_gt.copy()
+        if "expected_invoice_id" in gt_df.columns:
+            gt_df["expected_invoice_id"] = gt_df["expected_invoice_id"].fillna("")
+
+        store.gt_df = gt_df
+        run_pipeline(skip_llm=True)
+        save_session_cache()
+        return get_dashboard_data()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse ground truth file: {str(e)}")
 
 
 # Restore session cache on startup if exists

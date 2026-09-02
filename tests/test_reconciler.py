@@ -185,3 +185,64 @@ class TestWrongFormatReconciliation:
             assert counts[STATUS_DATE_MISMATCH] == 4
             assert counts[STATUS_MISSING_INVOICE] == 3
             assert counts[STATUS_DUPLICATE] == 1
+
+
+class TestBug2DuplicateDetection:
+
+    def test_exact_duplicate_without_dup_suffix(self):
+        """Bug 2 regression test: two bank rows, same (ref, amt, date), different IDs without _DUP suffix."""
+        bank_df = pd.DataFrame([
+            {"transaction_id": "BL-002", "date": date(2026, 11, 1), "description": "Acme Textiles", "amount": 8000.0, "reference": "PO-9002"},
+            {"transaction_id": "BL-002B", "date": date(2026, 11, 1), "description": "Acme Textiles", "amount": 8000.0, "reference": "PO-9002"},
+        ])
+        invoices_df = pd.DataFrame([
+            {"invoice_id": "INV-9002", "date": date(2026, 11, 1), "customer": "Acme Textiles", "amount": 8000.0, "invoice_reference": "PO-9002"}
+        ])
+        payments_df = pd.DataFrame([
+            {"payment_id": "PG-2", "date": date(2026, 11, 1), "merchant": "Acme Textiles", "amount": 8000.0, "reference": "PO-9002", "status": "settled"}
+        ])
+
+        results = reconcile(bank_df, invoices_df, payments_df, verbose=False)
+        assert len(results) == 2
+
+        res_by_id = {r.transaction_id: r for r in results}
+        assert res_by_id["BL-002"].status == STATUS_MATCH
+        assert res_by_id["BL-002"].invoice_id == "INV-9002"
+        assert res_by_id["BL-002B"].status == STATUS_DUPLICATE
+        assert "Duplicate of BL-002" in res_by_id["BL-002B"].reason
+
+
+class TestHoldoutReconciliation:
+
+    def test_holdout_15_row_benchmark(self):
+        """Holdout dataset test: 15 rows with currency, date, duplication, and column edge cases."""
+        from src.ingestion import read_tabular_file, normalize_dataframe_columns
+        from pathlib import Path
+
+        holdout_dir = Path("data/holdout")
+        if not holdout_dir.exists():
+            holdout_dir = Path("data/claude test")
+
+        bank_df = normalize_dataframe_columns(read_tabular_file(str(holdout_dir / "bank_statement.csv")), "bank")
+        inv_df = normalize_dataframe_columns(read_tabular_file(str(holdout_dir / "billing_ledger.csv")), "invoice")
+        pay_df = normalize_dataframe_columns(read_tabular_file(str(holdout_dir / "gateway_settlements.csv")), "payment")
+        gt_df = read_tabular_file(str(holdout_dir / "ground_truth.csv"))
+
+        results = reconcile(bank_df, inv_df, pay_df, verbose=False)
+        metrics = measure_accuracy(results, gt_df, verbose=False)
+
+        assert metrics["matches_dataset"] is True
+        assert metrics["accuracy"] > 73.3, f"Accuracy {metrics['accuracy']}% must be > 73.3%"
+        assert metrics["invoice_correct"] == 15, f"Invoice correct {metrics['invoice_correct']}/15"
+
+        res_map = {r.transaction_id: r for r in results}
+        # BL-002B must be DUPLICATE
+        assert res_map["BL-002B"].status == STATUS_DUPLICATE
+        # BL-001 must have real invoice_id INV-9001 (not PO-9001)
+        assert res_map["BL-001"].invoice_id == "INV-9001"
+        assert res_map["BL-002"].invoice_id == "INV-9002"
+        assert res_map["BL-004"].invoice_id == "INV-9004"
+        assert res_map["BL-005"].invoice_id == "INV-9005"
+        assert res_map["BL-006"].invoice_id == "INV-9006"
+        assert res_map["BL-011"].invoice_id == "INV-9011"
+        assert res_map["BL-014"].invoice_id == "INV-9014"

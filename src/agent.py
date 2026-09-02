@@ -535,11 +535,12 @@ def ask_question(
     bank_df: Optional[pd.DataFrame] = None,
     invoices_df: Optional[pd.DataFrame] = None,
     payments_df: Optional[pd.DataFrame] = None,
+    metrics: Optional[Dict[str, Any]] = None,
     verbose: bool = True,
 ) -> str:
     """
     Autonomous financial reasoning copilot capable of multi-table cross-referencing,
-    merchant exposure aggregation, and risk evaluation.
+    merchant exposure aggregation, benchmark accuracy audit, and risk evaluation.
     """
 
     status_counts = {}
@@ -577,6 +578,18 @@ def ask_question(
         "all_exceptions_inventory": exceptions_detail,
         "all_duplicates_inventory": duplicates_detail,
     }
+
+    if metrics:
+        context["ground_truth_benchmark_metrics"] = {
+            "matches_dataset": metrics.get("matches_dataset", True),
+            "measured_accuracy_pct": metrics.get("accuracy", 0.0),
+            "total_evaluated_records": metrics.get("total", 0),
+            "correct_records": metrics.get("correct", 0),
+            "invoice_correct_records": metrics.get("invoice_correct", 0),
+            "category_breakdown": metrics.get("categories", {}),
+            "benchmark_failures_count": len(metrics.get("incorrect_predictions", [])),
+            "benchmark_failures_list": metrics.get("incorrect_predictions", []),
+        }
 
     if bank_df is not None:
         clean_bank = bank_df[~bank_df["transaction_id"].str.contains("_DUP", na=False)]

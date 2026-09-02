@@ -30,18 +30,19 @@ export function ReconciliationOverviewAndChat({
   const records = data.records || [];
   const summary = data.summary || {};
   const cashPos = summary.cash_position || {};
+  const metrics = data.metrics || null;
 
   const matches = records.filter(r => r.status === 'MATCH');
   const exceptions = records.filter(r => !['MATCH', 'DUPLICATE'].includes(r.status));
   const duplicates = records.filter(r => r.status === 'DUPLICATE');
+  const multipleMatches = records.filter(r => r.status === 'MULTIPLE_MATCHES');
   const amtMismatches = records.filter(r => r.status === 'AMOUNT_MISMATCH');
   const dateMismatches = records.filter(r => r.status === 'DATE_MISMATCH');
   const missingInvoices = records.filter(r => r.status === 'MISSING_INVOICE');
 
+  // Unified convention: exclude duplicates from denominator for true match rate
   const cleanTotal = Math.max(1, records.length - duplicates.length);
-  const totalCount = Math.max(1, records.length);
   const cleanMatchRate = (matches.length / cleanTotal * 100);
-  const allMatchRate = (matches.length / totalCount * 100);
 
   const totalBankMoney = cashPos.total_bank_amount || (cashPos.matched_amount || 0) + (cashPos.pending_amount || 0) || 1;
   const matchedMoneyPct = totalBankMoney > 0 ? Math.min(100, Math.max(0, (cashPos.matched_amount || 0) / totalBankMoney * 100)) : 0;
@@ -96,7 +97,7 @@ export function ReconciliationOverviewAndChat({
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Matched Rate</div>
             <div className="text-2xl font-black text-emerald-400">{cleanMatchRate.toFixed(1)}%</div>
             <div className="text-xs text-emerald-400 font-medium mt-1">
-              🎯 {allMatchRate.toFixed(1)}% of all records ({matches.length}/{records.length})
+              🎯 Verified match rate ({matches.length}/{cleanTotal})
             </div>
           </div>
 
@@ -153,7 +154,7 @@ export function ReconciliationOverviewAndChat({
             <div className="space-y-2.5 text-xs">
               <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-emerald-300 transition-all hover:bg-[#383838]">
                 <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Clean Matches</span>
-                <strong className="font-mono">{matches.length} ({allMatchRate.toFixed(0)}%)</strong>
+                <strong className="font-mono">{matches.length} ({cleanMatchRate.toFixed(0)}%)</strong>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-rose-300 transition-all hover:bg-[#383838]">
                 <span className="flex items-center gap-1.5"><AlertOctagon className="w-4 h-4 text-rose-400" /> Price Differences</span>
@@ -167,6 +168,12 @@ export function ReconciliationOverviewAndChat({
                 <span className="flex items-center gap-1.5"><FileQuestion className="w-4 h-4 text-purple-400" /> Missing Bills / Receipts</span>
                 <strong className="font-mono">{missingInvoices.length}</strong>
               </div>
+              {multipleMatches.length > 0 && (
+                <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-amber-500/40 font-medium text-amber-300 transition-all hover:bg-[#383838]">
+                  <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-amber-400" /> Multiple Matches / Shared PO</span>
+                  <strong className="font-mono">{multipleMatches.length}</strong>
+                </div>
+              )}
               <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-slate-300 transition-all hover:bg-[#383838]">
                 <span className="flex items-center gap-1.5"><Copy className="w-4 h-4 text-slate-400" /> Duplicate Payments</span>
                 <strong className="font-mono">{duplicates.length}</strong>
@@ -239,6 +246,12 @@ export function ReconciliationOverviewAndChat({
                 <span className="flex items-center gap-1.5 text-amber-400 font-bold">🟡 HIGH RISK</span>
                 <span className="text-slate-300 font-mono font-semibold">{amtMismatches.length} Price Differences</span>
               </div>
+              {multipleMatches.length > 0 && (
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#2F2F2F] border border-amber-500/40 transition-all hover:bg-[#383838]">
+                  <span className="flex items-center gap-1.5 text-amber-400 font-bold">🟠 AMBIGUOUS</span>
+                  <span className="text-slate-300 font-mono font-semibold">{multipleMatches.length} Multiple Matches / Shared PO</span>
+                </div>
+              )}
               <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] transition-all hover:bg-[#383838]">
                 <span className="flex items-center gap-1.5 text-rose-400 font-bold">🔴 NEEDS ACTION</span>
                 <span className="text-slate-300 font-mono font-semibold">{missingInvoices.length} Missing Bills</span>
@@ -275,7 +288,8 @@ export function ReconciliationOverviewAndChat({
                     { id: 'ALL', label: `All Issues (${exceptions.length})` },
                     { id: 'AMOUNT_MISMATCH', label: `Price Differences (${amtMismatches.length})` },
                     { id: 'DATE_MISMATCH', label: `Date Delays (${dateMismatches.length})` },
-                    { id: 'MISSING_INVOICE', label: `Missing Bills (${missingInvoices.length})` }
+                    { id: 'MISSING_INVOICE', label: `Missing Bills (${missingInvoices.length})` },
+                    ...(multipleMatches.length > 0 ? [{ id: 'MULTIPLE_MATCHES', label: `Multiple Matches (${multipleMatches.length})` }] : [])
                   ].map(f => (
                     <button
                       key={f.id}
@@ -291,14 +305,22 @@ export function ReconciliationOverviewAndChat({
                 <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                   {filteredExceptions.map((r) => {
                     const isResolved = resolvedTxs.has(r.transaction_id) || r.is_resolved;
-                    const statusLabel = r.status === 'AMOUNT_MISMATCH' ? 'Price Difference' : r.status === 'DATE_MISMATCH' ? 'Date Delay' : r.status === 'MISSING_INVOICE' ? 'Missing Bill' : r.status;
+                    const statusLabel = r.status === 'AMOUNT_MISMATCH' 
+                      ? 'Price Difference' 
+                      : r.status === 'DATE_MISMATCH' 
+                      ? 'Date Delay' 
+                      : r.status === 'MISSING_INVOICE' 
+                      ? 'Missing Bill' 
+                      : r.status === 'MULTIPLE_MATCHES'
+                      ? 'Multiple Matches'
+                      : r.status;
                     return (
                       <div key={r.transaction_id} className={`p-4 rounded-xl border transition ${isResolved ? 'bg-[#2F2F2F] border-emerald-500/40' : 'bg-[#212121] border-[#2F2F2F] shadow-sm'}`}>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2">
                             <span className="font-mono font-bold text-xs text-emerald-400 bg-[#2F2F2F] px-2 py-0.5 rounded">{r.transaction_id}</span>
                             <span className="text-xs font-bold text-white">{r.vendor || r.invoice_customer || r.payment_merchant || 'Customer'}</span>
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${r.status === 'AMOUNT_MISMATCH' ? 'bg-rose-950 text-rose-300 border border-rose-800/40' : r.status === 'DATE_MISMATCH' ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/40' : 'bg-purple-950 text-purple-300 border border-purple-800/40'}`}>
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${r.status === 'AMOUNT_MISMATCH' ? 'bg-rose-950 text-rose-300 border border-rose-800/40' : r.status === 'DATE_MISMATCH' ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/40' : r.status === 'MULTIPLE_MATCHES' ? 'bg-amber-950 text-amber-300 border border-amber-800/40' : 'bg-purple-950 text-purple-300 border border-purple-800/40'}`}>
                               {statusLabel}
                             </span>
                             {isResolved && <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800/40">✓ FIXED</span>}
@@ -310,7 +332,7 @@ export function ReconciliationOverviewAndChat({
                         </div>
 
                         <p className="text-xs text-slate-300 bg-[#2F2F2F] p-2.5 rounded-lg border border-[#3A3A3A] mb-3">
-                          <strong className="text-emerald-400">AI Explanation:</strong> {r.explanation || r.reason || 'Price difference requires fee adjustment.'}
+                          <strong className="text-emerald-400">AI Explanation:</strong> {r.explanation || r.reason || 'Variance requires controller review.'}
                         </p>
 
                         {!isResolved && (
@@ -328,6 +350,11 @@ export function ReconciliationOverviewAndChat({
                             {r.status === 'MISSING_INVOICE' && (
                               <button onClick={() => handleResolve(r.transaction_id, 'request_bill_ap')} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition">
                                 📨 Request Bill from Seller
+                              </button>
+                            )}
+                            {r.status === 'MULTIPLE_MATCHES' && (
+                              <button onClick={() => handleResolve(r.transaction_id, 'confirm_multi_match')} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition">
+                                🔎 Review Shared PO Candidates
                               </button>
                             )}
                           </div>

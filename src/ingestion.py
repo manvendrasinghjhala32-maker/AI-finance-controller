@@ -9,9 +9,12 @@ and validates rows into clean standard DataFrames.
 import re
 import io
 import csv
+import logging
 import pandas as pd
 from datetime import datetime, date
 from typing import Tuple, Optional, Union, Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 from src.models import BankTransaction, Invoice, Payment
 from src.config import (
@@ -155,7 +158,7 @@ def clean_currency_series(series: pd.Series) -> pd.Series:
 def smart_parse_dates(series: pd.Series) -> pd.Series:
     """
     Intelligently parses dates in any international, ISO, US, or Indian format.
-    Automatically detects dayfirst (DD/MM/YYYY vs MM/DD/YYYY) based on value distribution.
+    Automatically detects dayfirst and aligns mixed-format dates (MM/DD vs DD/MM) to the dominant dataset period.
     """
     sample = series.dropna().astype(str).head(60)
     dayfirst = False
@@ -184,6 +187,32 @@ def smart_parse_dates(series: pd.Series) -> pd.Series:
         if parsed_alt.isna().sum() < parsed.isna().sum():
             parsed = parsed_alt
 
+    # Align mixed single-entry date format anomalies to the dominant month
+    valid_dates = parsed.dropna()
+    if len(valid_dates) >= 3:
+        mode_month = valid_dates.dt.month.mode()[0]
+        mode_year = valid_dates.dt.year.mode()[0]
+        
+        aligned = []
+        for orig_val, parsed_dt in zip(series, parsed):
+            if pd.isna(parsed_dt):
+                aligned.append(parsed_dt)
+                continue
+            if parsed_dt.month != mode_month and parsed_dt.year == mode_year:
+                m = re.search(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", str(orig_val).strip())
+                if m:
+                    d1, d2, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                    if len(str(y)) == 2:
+                        y += 2000
+                    if d1 == mode_month and 1 <= d2 <= 31:
+                        try:
+                            aligned.append(pd.Timestamp(year=mode_year, month=mode_month, day=d2))
+                            continue
+                        except Exception:
+                            pass
+            aligned.append(parsed_dt)
+        parsed = pd.Series(aligned, index=series.index)
+
     # Fallback any remaining NaT to today
     today_date = datetime.now().date()
     return parsed.dt.date.fillna(today_date)
@@ -196,14 +225,14 @@ def smart_parse_dates(series: pd.Series) -> pd.Series:
 SLOT_PATTERNS: Dict[str, List[Tuple[str, int]]] = {
     # Bank Transaction ID
     "transaction_id": [
-        (r"^(transaction_id|txn_id|tx_id|trans_id|txn_identifier|transaction_identifier|tx_identifier|identifier)$", 100),
-        (r"(txn_id|tx_id|transaction_id|trans_id|identifier|trx_id|trans_num|txn_num|txnid|txid)", 85),
-        (r"^(id|txn|trx|tx|entry_id|record_id|voucher_no|doc_no|document_id|belnr)$", 75),
+        (r"^(transaction_id|txn_id|tx_id|trans_id|txn_identifier|transaction_identifier|tx_identifier|identifier|stmt_line_no|stmt_line|statement_line_no|statement_line)$", 100),
+        (r"(txn_id|tx_id|transaction_id|trans_id|identifier|trx_id|trans_num|txn_num|txnid|txid|stmt_line|statement_line|line_no)", 85),
+        (r"^(id|txn|trx|tx|entry_id|record_id|voucher_no|doc_no|document_id|belnr|line)$", 75),
     ],
-    # Invoice ID / Bill Number
+    # Invoice ID / Bill Number (Primary Key of Invoice)
     "invoice_id": [
-        (r"^(invoice_id|inv_id|bill_id|bill_no|invoice_no|inv_no|document_number|doc_no|doc_num|document_no)$", 100),
-        (r"(invoice_id|inv_id|bill_id|bill_no|invoice_no|inv_no|doc_no|doc_num|document_number|document_no|bill_num|invid)", 85),
+        (r"^(invoice_id|inv_id|bill_id|bill_no|invoice_no|inv_no|bill_ref|bill_reference|inv_ref|invoice_ref|document_number|doc_no|doc_num|document_no|doc_id|bill_code|invoice_code|document_ref|bill_num|invoice_num)$", 100),
+        (r"(invoice_id|inv_id|bill_id|bill_no|invoice_no|inv_no|bill_ref|bill_reference|inv_ref|invoice_ref|doc_no|doc_num|document_number|document_no|bill_num|invid|bill_code|inv_code|doc_id|bill_number|invoice_number)", 85),
         (r"^(id|inv|bill|doc|voucher_no|ebeln|vbeln)$", 75),
     ],
     # Payment ID
@@ -214,20 +243,20 @@ SLOT_PATTERNS: Dict[str, List[Tuple[str, int]]] = {
     ],
     # Date (all schemas)
     "date": [
-        (r"^(date|posting_date|billing_date|capture_date|transaction_date|txn_date|invoice_date|bill_date|value_date|timestamp|created_at|issue_date|due_date|post_date)$", 100),
-        (r"(posting_date|billing_date|capture_date|txn_date|trans_date|value_date|val_dt|bldat|timestamp|issue_date|due_date|settled_date|post_date)", 90),
+        (r"^(date|posting_date|billing_date|capture_date|transaction_date|txn_date|invoice_date|bill_date|bill_dt|value_date|timestamp|created_at|issue_date|due_date|post_date)$", 100),
+        (r"(posting_date|billing_date|capture_date|txn_date|trans_date|value_date|val_dt|bldat|timestamp|issue_date|due_date|settled_date|post_date|bill_dt)", 90),
         (r"(date|dt|period|time|day)", 70),
     ],
     # Bank Counterparty / Description
     "description": [
-        (r"^(counterparty_description|description|merchant|vendor|payee|particulars|narrative|party|counterparty|payee_name|beneficiary|account_name|party_name|vendor_name|merchant_name)$", 100),
-        (r"(counterparty|merchant|vendor|particulars|narrative|payee|beneficiary|description|account_name|party)", 85),
+        (r"^(counterparty_description|description|narration|narrative|merchant|vendor|payee|particulars|party|counterparty|payee_name|beneficiary|account_name|party_name|vendor_name|merchant_name|remarks|details)$", 100),
+        (r"(counterparty|merchant|vendor|particulars|narration|narrative|payee|beneficiary|description|account_name|party|remarks)", 85),
         (r"^(name|customer|client|entity|sgtxt)$", 70),
     ],
     # Invoice Customer / Client Entity
     "customer": [
         (r"^(client_entity|customer|client|buyer|entity|party|customer_name|client_name|account_name|company|debtor|bill_to|party_name|buyer_name)$", 100),
-        (r"(client_entity|customer|client|buyer|entity|party|debtor|company|supplier)", 85),
+        (r"(client_entity|customer|client|buyer|entity|party|debtor|company|supplier|buyer_name)", 85),
         (r"^(name|merchant|vendor|description)$", 70),
     ],
     # Payment Merchant
@@ -238,21 +267,21 @@ SLOT_PATTERNS: Dict[str, List[Tuple[str, int]]] = {
     ],
     # Amount (all schemas)
     "amount": [
-        (r"^(net_debit_amount|gross_invoice_amount|settled_amount|amount|net_amount|gross_amount|total_amount|txn_amount|bill_amount|invoice_amount|debit|credit|total|value|price|net_val|gross_val|net_debit)$", 100),
-        (r"(net_debit|gross_invoice|settled_amount|gross_amount|net_amount|invoice_amount|bill_amount|txn_amount|total_amount|paid_amount|net_val|gross_val)", 90),
+        (r"^(net_debit_amount|gross_invoice_amount|settled_amount|amount|net_amount|gross_amount|total_amount|txn_amount|bill_amount|invoice_amount|debit|credit|total|value|price|net_val|gross_val|net_debit|debit_inr|credit_inr|bill_value)$", 100),
+        (r"(net_debit|gross_invoice|settled_amount|gross_amount|net_amount|invoice_amount|bill_amount|txn_amount|total_amount|paid_amount|net_val|gross_val|bill_value|debit_inr)", 90),
         (r"(amount|debit|credit|total|value|price|wrbtr|dmbtr|val|sum|balance|charge|fee)", 75),
     ],
     # Bank Reference (PO / UTR / Order)
     "reference": [
-        (r"^(client_po_reference|po_number|order_ref_code|reference|ref|po_ref|order_ref|utr|ref_no|ref_num|invoice_ref|po|order_id|cheque_no|check_no|tracking_id|ref_code)$", 100),
-        (r"(po_reference|client_po|order_ref|ref_code|po_number|ref_no|ref_num|utr|order_no|tracking_no|external_id|ref)", 85),
+        (r"^(client_po_reference|po_number|order_ref_code|reference|ref|po_ref|order_ref|utr|ref_no|ref_num|invoice_ref|po|order_id|cheque_no|check_no|tracking_id|ref_code|cust_ref_code|cust_ref|client_ref_code)$", 100),
+        (r"(po_reference|client_po|order_ref|ref_code|po_number|ref_no|ref_num|utr|order_no|tracking_no|external_id|ref|cust_ref|client_ref)", 85),
         (r"(reference|ref|po|order|memo|note|zuonr)", 70),
     ],
-    # Invoice Reference
+    # Invoice Reference (PO / Order / Join Key with Bank)
     "invoice_reference": [
-        (r"^(po_number|client_po_reference|order_ref_code|invoice_reference|po_ref|order_ref|reference|ref_no|ref_num|po|order_id|ref|ref_code)$", 100),
-        (r"(po_number|po_ref|client_po|order_ref|ref_code|ref_no|ref_num|invoice_ref|ref_no|order_id)", 85),
-        (r"(reference|ref|po|order)", 70),
+        (r"^(po_match_code|po_match|po_number|po_no|po_code|po_ref|client_po_reference|client_po|customer_po|cust_po|order_ref_code|order_ref|order_no|order_id|match_code|invoice_reference|ref_code|cust_ref)$", 100),
+        (r"(po_match|po_number|po_no|po_code|po_ref|client_po|cust_po|order_ref|ref_code|ref_no|ref_num|order_no|match_code|po)", 85),
+        (r"(reference|ref|po|order|memo|note|zuonr)", 70),
     ],
     # Payment Status
     "status": [
@@ -262,7 +291,7 @@ SLOT_PATTERNS: Dict[str, List[Tuple[str, int]]] = {
 }
 
 
-def normalize_dataframe_columns(df: pd.DataFrame, schema_type: str) -> pd.DataFrame:
+def normalize_dataframe_columns(df: pd.DataFrame, schema_type: str, source_name: Optional[str] = None) -> pd.DataFrame:
     """
     Intelligently maps and normalizes user-uploaded CSV/Excel columns to standard engine schema.
     Uses multi-tier semantic regex scoring and data-type inspection.
@@ -363,6 +392,9 @@ def normalize_dataframe_columns(df: pd.DataFrame, schema_type: str) -> pd.DataFr
             df["reference"] = df["reference"].astype(str).str.strip()
 
         if "description" not in df.columns:
+            msg = f"No description/narration column detected in {source_name or 'bank statement'}; composite fuzzy matching will be degraded for this file."
+            logger.warning(msg)
+            df.attrs["ingestion_warning"] = msg
             df["description"] = "Generic Merchant"
         else:
             df["description"] = df["description"].astype(str).str.strip()
@@ -390,6 +422,17 @@ def normalize_dataframe_columns(df: pd.DataFrame, schema_type: str) -> pd.DataFr
                 df["invoice_reference"] = df["invoice_id"]
         else:
             df["invoice_reference"] = df["invoice_reference"].astype(str).str.strip()
+
+        # Semantic content validation: check if invoice_id and invoice_reference were inverted
+        # e.g. invoice_id contains PO-9001 and invoice_reference contains INV-9001
+        inv_vals = df["invoice_id"].astype(str).str.upper()
+        ref_vals = df["invoice_reference"].astype(str).str.upper()
+
+        po_in_id = inv_vals.str.match(r"^(PO|ORD|ORDER|REF)[-_]?\d+", na=False).sum()
+        inv_in_ref = ref_vals.str.match(r"^(INV|BILL|DOC|INVOICE)[-_]?\d+", na=False).sum()
+
+        if po_in_id > 0 and inv_in_ref > 0 and po_in_id >= len(df) * 0.4 and inv_in_ref >= len(df) * 0.4:
+            df["invoice_id"], df["invoice_reference"] = df["invoice_reference"].copy(), df["invoice_id"].copy()
 
         if "customer" not in df.columns:
             df["customer"] = "Generic Customer"

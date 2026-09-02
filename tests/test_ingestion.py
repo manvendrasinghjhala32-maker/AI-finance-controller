@@ -194,3 +194,27 @@ class TestCustomNormalization:
         assert norm.iloc[0]["transaction_id"] == "TRX-1"
         assert norm.iloc[0]["reference"] == "PO-999"
 
+    def test_bug1_invoice_id_and_reference_mapping(self):
+        """Bug 1 regression test: Bill_Ref maps to invoice_id, PO_Match_Code maps to invoice_reference."""
+        from src.ingestion import read_tabular_file, normalize_dataframe_columns
+
+        csv_content = b"Bill_Ref,Bill_Dt,Buyer_Name,Bill_Value,PO_Match_Code\nINV-9001,01/11/2026,Acme Textiles,12500.00,PO-9001\n"
+        df = read_tabular_file(csv_content)
+        norm = normalize_dataframe_columns(df, "invoice")
+
+        assert "invoice_id" in norm.columns
+        assert "invoice_reference" in norm.columns
+        assert norm.loc[norm["invoice_reference"] == "PO-9001", "invoice_id"].iloc[0] == "INV-9001"
+
+    def test_bug3_narration_recognized_as_description(self):
+        """Bug 3 regression test: Narration header is recognized as description, not Generic Merchant."""
+        from src.ingestion import read_tabular_file, normalize_dataframe_columns
+
+        csv_content = b"Stmt_Line_No,Value_Date,Narration,Debit_INR,Cust_Ref_Code\nBL-001,01/11/2026,Acme Textiles,12500.00,PO-9001\n"
+        df = read_tabular_file(csv_content)
+        norm = normalize_dataframe_columns(df, "bank")
+
+        assert "description" in norm.columns
+        assert norm.iloc[0]["description"] == "Acme Textiles"
+        assert norm.iloc[0]["description"] != "Generic Merchant"
+

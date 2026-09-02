@@ -49,6 +49,7 @@ export function ForecastView({ onExport }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
+            <img src="/finance_logo.png" alt="Cash Forecast" className="w-8 h-8 rounded-lg object-contain" />
             <h1 className="text-2xl font-bold text-white tracking-tight">
               Cash Forecast
             </h1>

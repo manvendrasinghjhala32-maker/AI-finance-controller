@@ -39,8 +39,9 @@ export function DocumentUploadLanding({ onUploadSuccess, onDemoLoad, loading, gl
   return (
     <div className="min-h-screen bg-[#212121] text-slate-100 flex flex-col items-center justify-center p-6 lg:p-12">
       {/* Header Title */}
-      <div className="text-center max-w-3xl mb-10 animate-fade-in">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#171717] border border-emerald-500/30 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-4 shadow-sm animate-float">
+      <div className="text-center max-w-3xl mb-10 animate-fade-in flex flex-col items-center">
+        <img src="/finance_logo.png" alt="Finance Controller" className="w-16 h-16 rounded-2xl mb-4 object-contain shadow-2xl animate-float" />
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#171717] border border-emerald-500/30 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-3 shadow-sm">
           <Sparkles className="w-3.5 h-3.5" />
           Smart Money & Invoice Matcher
         </div>
@@ -108,9 +109,55 @@ export function DocumentUploadLanding({ onUploadSuccess, onDemoLoad, loading, gl
                 </label>
               )}
             </div>
+
+            {/* Gateway Settlements (Optional) */}
+            <div className={`border-2 border-dashed rounded-xl p-5 transition-all duration-300 hover:scale-[1.015] text-center flex flex-col items-center justify-center ${paymentsFile ? 'border-cyan-500 bg-[#2F2F2F] shadow-lg shadow-cyan-950/20' : 'border-[#383838] hover:border-cyan-500/70 bg-[#212121] hover:bg-[#252525]'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2.5 ${paymentsFile ? 'bg-cyan-950 text-cyan-400 border border-cyan-500/30' : 'bg-[#2F2F2F] text-slate-400'}`}>
+                {paymentsFile ? <CheckCircle2 className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+              </div>
+              <label className="font-semibold text-slate-200 text-xs mb-0.5 block">
+                3. Gateway Settlements (.csv) <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <p className="text-[11px] text-slate-400 mb-3">Online payment settlement status & fee breakdown</p>
+
+              {paymentsFile ? (
+                <div className="flex items-center gap-2 text-xs font-medium text-cyan-300 bg-[#171717] px-3 py-1.5 rounded-lg border border-cyan-500/40 animate-scale-in">
+                  <span className="truncate max-w-[200px] font-mono">{paymentsFile.name}</span>
+                  <button type="button" onClick={() => setPaymentsFile(null)} className="text-cyan-400 hover:text-rose-400 font-bold ml-1 transition-colors">✕</button>
+                </div>
+              ) : (
+                <label className="cursor-pointer px-3.5 py-1.5 bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-[#3A3A3A] hover:border-cyan-500/50 text-slate-200 rounded-lg text-xs font-semibold shadow-sm transition-all duration-200 btn-interactive">
+                  Browse Gateway CSV
+                  <input type="file" accept=".csv" className="hidden" onChange={(e) => setPaymentsFile(e.target.files[0] || null)} />
+                </label>
+              )}
+            </div>
+
+            {/* Ground Truth Benchmark Key (Optional) */}
+            <div className={`border-2 border-dashed rounded-xl p-5 transition-all duration-300 hover:scale-[1.015] text-center flex flex-col items-center justify-center ${gtFile ? 'border-purple-500 bg-[#2F2F2F] shadow-lg shadow-purple-950/20' : 'border-[#383838] hover:border-purple-500/70 bg-[#212121] hover:bg-[#252525]'}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2.5 ${gtFile ? 'bg-purple-950 text-purple-400 border border-purple-500/30' : 'bg-[#2F2F2F] text-slate-400'}`}>
+                {gtFile ? <CheckCircle2 className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />}
+              </div>
+              <label className="font-semibold text-slate-200 text-xs mb-0.5 block">
+                🎯 4. Ground Truth / Benchmark Key (.csv) <span className="text-purple-400 font-normal">(Optional)</span>
+              </label>
+              <p className="text-[11px] text-slate-400 mb-3">Measures empirical accuracy vs expected labels live on UI</p>
+
+              {gtFile ? (
+                <div className="flex items-center gap-2 text-xs font-medium text-purple-300 bg-[#171717] px-3 py-1.5 rounded-lg border border-purple-500/40 animate-scale-in">
+                  <span className="truncate max-w-[200px] font-mono">{gtFile.name}</span>
+                  <button type="button" onClick={() => setGtFile(null)} className="text-purple-400 hover:text-rose-400 font-bold ml-1 transition-colors">✕</button>
+                </div>
+              ) : (
+                <label className="cursor-pointer px-3.5 py-1.5 bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-[#3A3A3A] hover:border-purple-500/50 text-purple-200 rounded-lg text-xs font-semibold shadow-sm transition-all duration-200 btn-interactive">
+                  Browse Benchmark CSV
+                  <input type="file" accept=".csv" className="hidden" onChange={(e) => setGtFile(e.target.files[0] || null)} />
+                </label>
+              )}
+            </div>
           </div>
 
-          {/* Advanced / Optional Settings Accordion */}
+          {/* Advanced Tolerances Accordion */}
           <div className="border border-[#2F2F2F] rounded-xl overflow-hidden bg-[#212121]">
             <button
               type="button"
@@ -119,35 +166,14 @@ export function DocumentUploadLanding({ onUploadSuccess, onDemoLoad, loading, gl
             >
               <span className="flex items-center gap-2">
                 <Settings2 className="w-4 h-4 text-emerald-400" />
-                Optional: Online Payments File & Match Settings
+                Matching Tolerances & Thresholds (Optional)
               </span>
               <span className="text-slate-400">{showAdvanced ? '▲ Hide' : '▼ Expand'}</span>
             </button>
 
             {showAdvanced && (
               <div className="p-6 bg-[#171717] space-y-6 border-t border-[#2F2F2F]">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">Online Payment Gateway File (.csv)</label>
-                    <input
-                      type="file"
-                      accept=".csv"
-                      className="text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#3A3A3A] file:text-xs file:font-semibold file:bg-[#2F2F2F] file:text-slate-200 hover:file:bg-[#3A3A3A] cursor-pointer"
-                      onChange={(e) => setPaymentsFile(e.target.files[0] || null)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">Benchmark / Test Key File (.csv)</label>
-                    <input
-                      type="file"
-                      accept=".csv"
-                      className="text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border file:border-[#3A3A3A] file:text-xs file:font-semibold file:bg-[#2F2F2F] file:text-slate-200 hover:file:bg-[#3A3A3A] cursor-pointer"
-                      onChange={(e) => setGtFile(e.target.files[0] || null)}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
                     <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
                       <span>Allowed Price Difference</span>
@@ -160,6 +186,21 @@ export function DocumentUploadLanding({ onUploadSuccess, onDemoLoad, loading, gl
                       step="25"
                       value={amountTolerance}
                       onChange={(e) => setAmountTolerance(Number(e.target.value))}
+                      className="w-full accent-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1">
+                      <span>Allowed Date Delay</span>
+                      <span className="text-emerald-400 font-bold font-mono">{dateTolerance} Days</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="7"
+                      step="1"
+                      value={dateTolerance}
+                      onChange={(e) => setDateTolerance(Number(e.target.value))}
                       className="w-full accent-emerald-500"
                     />
                   </div>

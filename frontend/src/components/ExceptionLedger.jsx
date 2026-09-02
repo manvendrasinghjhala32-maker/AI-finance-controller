@@ -41,6 +41,7 @@ export function ExceptionLedger({
         if (newFilter === 'AMOUNT') return item.status === 'AMOUNT_MISMATCH';
         if (newFilter === 'DATE') return item.status === 'DATE_MISMATCH';
         if (newFilter === 'MISSING') return item.status === 'MISSING_INVOICE';
+        if (newFilter === 'MULTIPLE') return item.status === 'MULTIPLE_MATCHES';
         if (newFilter === 'DUPLICATE') return item.status === 'DUPLICATE';
         return true;
       });
@@ -55,13 +56,14 @@ export function ExceptionLedger({
 
   // Filter Counts
   const filterCounts = useMemo(() => {
-    if (!records) return { EXCEPTIONS: 0, ALL: 0, AMOUNT: 0, DATE: 0, MISSING: 0, DUPLICATE: 0 };
+    if (!records) return { EXCEPTIONS: 0, ALL: 0, AMOUNT: 0, DATE: 0, MISSING: 0, MULTIPLE: 0, DUPLICATE: 0 };
     return {
       EXCEPTIONS: records.filter(r => !['MATCH', 'DUPLICATE'].includes(r.status)).length,
       ALL: records.length,
       AMOUNT: records.filter(r => r.status === 'AMOUNT_MISMATCH').length,
       DATE: records.filter(r => r.status === 'DATE_MISMATCH').length,
       MISSING: records.filter(r => r.status === 'MISSING_INVOICE').length,
+      MULTIPLE: records.filter(r => r.status === 'MULTIPLE_MATCHES').length,
       DUPLICATE: records.filter(r => r.status === 'DUPLICATE').length,
     };
   }, [records]);
@@ -76,6 +78,7 @@ export function ExceptionLedger({
       if (currentFilter === 'AMOUNT' && item.status !== 'AMOUNT_MISMATCH') return false;
       if (currentFilter === 'DATE' && item.status !== 'DATE_MISMATCH') return false;
       if (currentFilter === 'MISSING' && item.status !== 'MISSING_INVOICE') return false;
+      if (currentFilter === 'MULTIPLE' && item.status !== 'MULTIPLE_MATCHES') return false;
       if (currentFilter === 'DUPLICATE' && item.status !== 'DUPLICATE') return false;
 
       // Search Query
@@ -160,6 +163,12 @@ export function ExceptionLedger({
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-[#2F2F2F] text-rose-400 border border-rose-500/30">
             <FileQuestion className="w-3 h-3" /> MISSING BILL
+          </span>
+        );
+      case 'MULTIPLE_MATCHES':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-[#2F2F2F] text-amber-300 border border-amber-500/40">
+            <AlertTriangle className="w-3 h-3" /> MULTI MATCH
           </span>
         );
       case 'DUPLICATE':
@@ -267,6 +276,19 @@ export function ExceptionLedger({
           >
             Missing Bills ({filterCounts.MISSING})
           </button>
+
+          {filterCounts.MULTIPLE > 0 && (
+            <button
+              onClick={() => handleFilterChange('MULTIPLE')}
+              className={`px-3 py-1.5 rounded-lg transition-all whitespace-nowrap font-mono ${
+                currentFilter === 'MULTIPLE'
+                  ? 'bg-[#2F2F2F] text-amber-300 border border-amber-500/40 font-bold shadow-sm'
+                  : 'bg-[#212121] text-slate-400 border border-[#2F2F2F] hover:bg-[#3A3A3A] hover:text-slate-100'
+              }`}
+            >
+              Multiple Matches ({filterCounts.MULTIPLE})
+            </button>
+          )}
 
           <button
             onClick={() => handleFilterChange('DUPLICATE')}

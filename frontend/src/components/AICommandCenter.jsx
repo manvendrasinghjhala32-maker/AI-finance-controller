@@ -56,7 +56,15 @@ export function AICommandCenter({
 
         {selectedTx && (
           <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-md bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30">
-            {selectedTx.status === 'AMOUNT_MISMATCH' ? 'PRICE DELTA' : selectedTx.status === 'DATE_MISMATCH' ? 'DATE DELAY' : selectedTx.status === 'MISSING_INVOICE' ? 'MISSING BILL' : selectedTx.status}
+            {selectedTx.status === 'AMOUNT_MISMATCH' 
+              ? 'PRICE DELTA' 
+              : selectedTx.status === 'DATE_MISMATCH' 
+              ? 'DATE DELAY' 
+              : selectedTx.status === 'MISSING_INVOICE' 
+              ? 'MISSING BILL' 
+              : selectedTx.status === 'MULTIPLE_MATCHES'
+              ? 'MULTI CANDIDATES'
+              : selectedTx.status}
           </span>
         )}
       </div>
@@ -210,7 +218,22 @@ export function AICommandCenter({
                     </button>
                   )}
 
-                  {/* 4. Duplicate Transaction */}
+                  {/* 4. Multiple Matches / Shared PO */}
+                  {(selectedTx?.status === 'MULTIPLE_MATCHES' || (!selectedTx?.status && activeFilter === 'MULTIPLE')) && (
+                    <button
+                      onClick={() => handleAction('confirm_multi_match', 'Reviewed and resolved shared PO candidate')}
+                      disabled={resolving}
+                      className="w-full p-3 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-amber-500/40 text-amber-300 text-left transition-colors flex items-center gap-3 shadow-sm card-interactive"
+                    >
+                      <FileCheck className="w-5 h-5 shrink-0 text-amber-400" />
+                      <div>
+                        <div className="font-bold text-sm">Review Shared PO Invoices</div>
+                        <div className="text-xs text-slate-400 font-sans">Select matching invoice for PO {selectedTx?.reference || ''}</div>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* 5. Duplicate Transaction */}
                   {(selectedTx?.status === 'DUPLICATE' || (!selectedTx?.status && activeFilter === 'DUPLICATE')) && (
                     <button
                       onClick={() => handleAction('manual_override', 'Duplicate transaction marked and verified')}
@@ -225,7 +248,7 @@ export function AICommandCenter({
                     </button>
                   )}
 
-                  {/* 5. Clean Match / General Approval */}
+                  {/* 6. Clean Match / General Approval */}
                   {selectedTx?.status === 'MATCH' && (
                     <button
                       onClick={() => handleAction('manual_override', 'Transaction reviewed and approved')}

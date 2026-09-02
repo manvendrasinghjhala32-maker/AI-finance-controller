@@ -44,8 +44,8 @@ export function LoadingScreen({ datasetName = "Financial Documents" }) {
           {/* Middle Fast Ring */}
           <div className="absolute inset-2 rounded-full border-2 border-t-emerald-400 border-r-transparent border-b-cyan-400 border-l-transparent animate-spin" style={{ animationDuration: '1.8s' }} />
           {/* Inner Glowing Badge */}
-          <div className="relative w-14 h-14 rounded-2xl bg-[#212121] border border-emerald-500/40 flex items-center justify-center text-2xl shadow-lg shadow-emerald-950/40 animate-float">
-            🤖
+          <div className="relative w-14 h-14 rounded-2xl bg-[#212121] border border-emerald-500/40 flex items-center justify-center p-2 shadow-lg shadow-emerald-950/40 animate-float">
+            <img src="/finance_logo.png" alt="Loading" className="w-10 h-10 object-contain" />
           </div>
         </div>
 

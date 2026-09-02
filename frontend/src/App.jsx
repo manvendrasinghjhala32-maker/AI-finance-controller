@@ -6,6 +6,7 @@ import { AICommandCenter } from './components/AICommandCenter';
 import { ForecastView } from './components/ForecastView';
 import { GLEntriesView } from './components/GLEntriesView';
 import { AdjustmentsChangesView } from './components/AdjustmentsChangesView';
+import { BenchmarkEvaluationView } from './components/BenchmarkEvaluationView';
 import { FloatingAIChatWidget } from './components/FloatingAIChatWidget';
 import { LoadingScreen } from './components/LoadingScreen';
 
@@ -21,7 +22,9 @@ import {
   Zap, 
   CheckCircle2,
   Eye,
-  History
+  History,
+  ShieldCheck,
+  Layers
 } from 'lucide-react';
 
 export default function App() {
@@ -30,7 +33,7 @@ export default function App() {
   const [globalError, setGlobalError] = useState(null);
   const [activeDatasetLabel, setActiveDatasetLabel] = useState('');
   
-  // Navigation: 'overview' (default) | 'ledger' | 'forecast' | 'gl' | 'copilot'
+  // Navigation: 'overview' (default) | 'ledger' | 'benchmark' | 'forecast' | 'gl' | 'copilot'
   const [activeTab, setActiveTab] = useState('overview');
 
   // Selected Transaction for Exception Ledger Inspector
@@ -58,7 +61,7 @@ export default function App() {
           setActiveDatasetLabel(savedLabel);
 
           const savedTab = localStorage.getItem('afc_active_tab');
-          if (savedTab && ['overview', 'ledger', 'forecast', 'gl', 'changes'].includes(savedTab)) {
+          if (savedTab && ['overview', 'ledger', 'benchmark', 'forecast', 'gl', 'changes'].includes(savedTab)) {
             setActiveTab(savedTab);
           }
 
@@ -364,6 +367,7 @@ export default function App() {
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutGrid },
     { id: 'ledger', label: 'Differences & Issues', icon: AlertTriangle, badge: exceptionsCount },
+    { id: 'benchmark', label: 'Benchmark & Accuracy', icon: ShieldCheck, badge: data?.metrics ? `${data.metrics.accuracy.toFixed(0)}%` : undefined },
     { id: 'forecast', label: 'Cash Forecast (30 Days)', icon: TrendingUp },
     { id: 'gl', label: 'Accounting Records', icon: FileSpreadsheet },
   ];
@@ -376,9 +380,7 @@ export default function App() {
           {/* Brand & Dataset Badge */}
           <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-start">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-md">
-                🏦
-              </div>
+              <img src="/finance_logo.png" alt="Finance Controller" className="w-8 h-8 rounded-lg object-contain" />
               <div>
                 <h1 className="text-sm font-bold text-white tracking-wide leading-none">
                   Finance Controlling Assistant
@@ -503,17 +505,26 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: CASH FORECAST (30-DAY RUNWAY) */}
+        {/* TAB 3: BENCHMARK ACCURACY & GROUND TRUTH AUDIT */}
+        {activeTab === 'benchmark' && (
+          <BenchmarkEvaluationView 
+            data={data} 
+            onUploadSuccess={(updatedData) => setData(updatedData)} 
+            onAskAI={handleAskAIAboutTx}
+          />
+        )}
+
+        {/* TAB 4: CASH FORECAST (30-DAY RUNWAY) */}
         {activeTab === 'forecast' && (
           <ForecastView onExport={handleExport} />
         )}
 
-        {/* TAB 4: GENERAL LEDGER (GL) JOURNAL ADJUSTMENTS */}
+        {/* TAB 5: GENERAL LEDGER (GL) JOURNAL ADJUSTMENTS */}
         {activeTab === 'gl' && (
           <GLEntriesView onExport={handleExport} />
         )}
 
-        {/* TAB 5: DATASET ADJUSTMENTS & AUDIT TRAIL */}
+        {/* TAB 6: DATASET ADJUSTMENTS & AUDIT TRAIL */}
         {activeTab === 'changes' && (
           <AdjustmentsChangesView
             records={data.records}

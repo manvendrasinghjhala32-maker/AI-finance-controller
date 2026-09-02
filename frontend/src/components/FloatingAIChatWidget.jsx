@@ -63,9 +63,7 @@ export function FloatingAIChatWidget({
             {/* Top Fullscreen Header */}
             <div className="px-6 py-4 bg-[#171717] border-b border-[#2F2F2F] flex items-center justify-between shadow-md">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-md">
-                  🤖
-                </div>
+                <img src="/finance_logo.png" alt="AI Assistant" className="w-9 h-9 rounded-xl object-contain shadow-md" />
                 <div>
                   <div className="flex items-center gap-2.5">
                     <h2 className="text-base font-bold text-white tracking-wide">
@@ -241,9 +239,7 @@ export function FloatingAIChatWidget({
               {/* Top Modal Header */}
               <div className="p-4 bg-[#171717] border-b border-[#2F2F2F] flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-md">
-                    🤖
-                  </div>
+                  <img src="/finance_logo.png" alt="AI Assistant" className="w-8 h-8 rounded-lg object-contain shadow-md" />
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-bold text-white tracking-wide leading-none">
