@@ -1,0 +1,18 @@
+# Core data processing
+pandas>=2.0
+pydantic>=2.0
+rapidfuzz>=3.0
+
+# Google ADK (Agent Development Kit) & GenAI
+google-adk>=1.0.0
+
+# Backend API
+fastapi>=0.110.0
+uvicorn>=0.28.0
+python-multipart>=0.0.9
+
+# Testing
+pytest>=8.0
+
+# Environment management
+python-dotenv>=1.0
