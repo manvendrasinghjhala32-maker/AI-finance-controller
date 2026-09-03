@@ -75,7 +75,7 @@ Bank Transactions & Gateway Feeds
 ### 1. Setup Environment
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/AI-finance-controller.git
+git clone https://github.com/manvendrasinghjhala32-maker/AI-finance-controller.git
 cd AI-finance-controller
 
 # Create and activate virtual environment
