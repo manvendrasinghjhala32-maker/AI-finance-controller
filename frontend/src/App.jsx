@@ -391,9 +391,20 @@ export default function App() {
               </div>
             </div>
 
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-[#2F2F2F] px-2.5 py-1 rounded-full border border-emerald-500/30">
-              <Sparkles className="w-3 h-3 text-emerald-400" /> Smart AI Active
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-[#2F2F2F] px-2.5 py-1 rounded-full border border-emerald-500/30">
+                <Sparkles className="w-3 h-3 text-emerald-400" /> Smart AI Active
+              </span>
+              {(summary.records_per_second || data.records_per_second) && (
+                <span 
+                  className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-purple-400 bg-[#2F2F2F] px-2.5 py-1 rounded-full border border-purple-500/30 shadow-sm"
+                  title={`Throughput speed: ${Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} records/sec in ${(summary.elapsed_seconds || data.elapsed_seconds || 0).toFixed(3)}s`}
+                >
+                  <Zap className="w-3 h-3 text-purple-400" />
+                  <span>{Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} rec/s</span>
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Navigation Tabs */}

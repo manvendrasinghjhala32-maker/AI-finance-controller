@@ -3,8 +3,8 @@ pandas>=2.0
 pydantic>=2.0
 rapidfuzz>=3.0
 
-# Google ADK (Agent Development Kit) & GenAI
-google-adk>=1.0.0
+# Google GenAI SDK
+google-genai>=1.0.0
 
 # Backend API
 fastapi>=0.110.0

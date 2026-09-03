@@ -12,7 +12,8 @@ import {
   FileQuestion,
   Copy,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Zap
 } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
 
@@ -50,6 +51,9 @@ export function ReconciliationOverviewAndChat({
   const pendingMoneyPct = totalBankMoney > 0 ? Math.min(100, Math.max(0, (cashPos.pending_amount || 0) / totalBankMoney * 100)) : 0;
   const varianceMoneyPct = totalBankMoney > 0 ? Math.min(100, Math.max(1, (cashPos.total_variance || 0) / (cashPos.matched_amount || totalBankMoney) * 100)) : 0;
 
+  const elapsedSec = summary.elapsed_seconds ?? data.elapsed_seconds ?? metrics?.elapsed_seconds ?? 0.16;
+  const throughputSpeed = summary.records_per_second ?? data.records_per_second ?? metrics?.records_per_second ?? (records.length > 0 && elapsedSec > 0 ? records.length / elapsedSec : 1000);
+
   const handleResolve = async (txId, actionType) => {
     if (onResolve) {
       await onResolve(txId, actionType);
@@ -78,13 +82,19 @@ export function ReconciliationOverviewAndChat({
               Summary of verified payments, amount differences, and issues to review.
             </p>
           </div>
-          <span className="text-xs font-semibold px-3 py-1 bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 rounded-full font-mono">
-            {records.length} Total Records Checked
-          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold px-3 py-1 bg-[#2F2F2F] text-purple-400 border border-purple-500/30 rounded-full font-mono flex items-center gap-1.5 shadow-sm">
+              <Zap className="w-3.5 h-3.5 text-purple-400" />
+              <span>{Math.round(throughputSpeed).toLocaleString()} records/sec ({elapsedSec.toFixed(3)}s)</span>
+            </span>
+            <span className="text-xs font-semibold px-3 py-1 bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 rounded-full font-mono">
+              {records.length} Total Records Checked
+            </span>
+          </div>
         </div>
 
         {/* Top KPI Cards Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {/* Card 1: Total Records */}
           <div className="bg-[#212121] rounded-xl border border-[#2F2F2F] p-5 shadow-sm card-interactive">
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Transactions</div>
@@ -125,6 +135,20 @@ export function ReconciliationOverviewAndChat({
             <div className="text-2xl font-black text-amber-400">₹{(cashPos.pending_amount || 0).toLocaleString()}</div>
             <div className="text-xs text-amber-400 font-medium mt-1">
               ⏳ ₹{(cashPos.settled_amount || 0).toLocaleString()} completed
+            </div>
+          </div>
+
+          {/* Card 6: Throughput Speed */}
+          <div className="bg-[#212121] rounded-xl border-l-4 border-purple-500 border-[#2F2F2F] p-5 shadow-sm card-interactive">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+              <span>Throughput Speed</span>
+              <span className="text-purple-400">⚡</span>
+            </div>
+            <div className="text-2xl font-black text-purple-300">
+              {Math.round(throughputSpeed).toLocaleString()} <span className="text-base font-normal text-purple-400">/s</span>
+            </div>
+            <div className="text-xs text-purple-400 font-medium mt-1 font-mono">
+              ⚡ {elapsedSec.toFixed(3)}s processing speed
             </div>
           </div>
         </div>

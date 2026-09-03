@@ -1,5 +1,5 @@
 """
-AI Financial Intelligence Agent Layer — Google ADK + Gemini
+AI Financial Intelligence Agent Layer — Google GenAI SDK + Gemini
 
 Core Capabilities:
 1. Exception Explainer & Root Cause Diagnostician
