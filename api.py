@@ -100,6 +100,8 @@ class StateStore:
             "date_tolerance": DATE_TOLERANCE_DAYS,
             "fuzzy_threshold": FUZZY_MATCH_THRESHOLD,
         }
+        self.elapsed_seconds: Optional[float] = None
+        self.records_per_second: Optional[float] = None
 
 store = StateStore()
 
@@ -220,6 +222,8 @@ def run_pipeline(
     if store.bank_df is None or store.invoices_df is None or store.payments_df is None:
         store.bank_df, store.invoices_df, store.payments_df, store.gt_df = load_all_data(verbose=False)
 
+    import time
+    t0 = time.perf_counter()
     # Reconcile using active tolerances
     store.results = reconcile(
         store.bank_df,
@@ -230,9 +234,16 @@ def run_pipeline(
         date_tolerance=int(store.tolerances.get("date_tolerance", DATE_TOLERANCE_DAYS)),
         fuzzy_threshold=float(store.tolerances.get("fuzzy_threshold", FUZZY_MATCH_THRESHOLD)),
     )
+    elapsed = time.perf_counter() - t0
+    store.elapsed_seconds = round(elapsed, 4)
+    total_recs = len(store.bank_df) if store.bank_df is not None else len(store.results)
+    store.records_per_second = round(total_recs / elapsed, 1) if elapsed > 0 else 0.0
 
     if store.gt_df is not None:
         store.metrics = measure_accuracy(store.results, store.gt_df, verbose=False)
+        if store.metrics and isinstance(store.metrics, dict):
+            store.metrics["elapsed_seconds"] = store.elapsed_seconds
+            store.metrics["records_per_second"] = store.records_per_second
     else:
         store.metrics = None
 
@@ -281,30 +292,17 @@ def health_check():
 
 @app.post("/api/load-demo")
 def load_demo_dataset():
+    store.tolerances = {
+        "amount_tolerance": AMOUNT_TOLERANCE,
+        "date_tolerance": DATE_TOLERANCE_DAYS,
+        "fuzzy_threshold": FUZZY_MATCH_THRESHOLD,
+    }
     store.bank_df, store.invoices_df, store.payments_df, store.gt_df = load_all_data(verbose=False)
     store.resolved_overrides.clear()
     store.explanations = None
     store.executive_summary = None
     run_pipeline(skip_llm=True)
     return get_dashboard_data()
-
-
-@app.post("/api/reset")
-def reset_backend_state():
-    store.bank_df = None
-    store.invoices_df = None
-    store.payments_df = None
-    store.gt_df = None
-    store.results = None
-    store.metrics = None
-    store.cash_position = None
-    store.risk_assessment = None
-    store.journal_entries = None
-    store.cash_forecast = None
-    store.explanations = None
-    store.executive_summary = None
-    store.resolved_overrides.clear()
-    return {"status": "success", "message": "State reset successfully."}
 
 
 @app.get("/api/data")
@@ -467,6 +465,8 @@ def get_dashboard_data():
             "match_rate": match_rate,
             "exceptions_count": exceptions_count,
             "accuracy_percentage": store.metrics["accuracy"] if (store.metrics and store.metrics.get("matches_dataset", True) and "accuracy" in store.metrics) else match_rate,
+            "elapsed_seconds": store.elapsed_seconds,
+            "records_per_second": store.records_per_second,
             "cash_position": store.cash_position,
             "risk_summary": store.risk_assessment.get("risk_breakdown") if store.risk_assessment else {},
             "average_risk_score": store.risk_assessment.get("average_risk_score") if store.risk_assessment else 0,
@@ -480,6 +480,8 @@ def get_dashboard_data():
         },
         "metrics": store.metrics,
         "ground_truth_metrics": store.metrics,
+        "elapsed_seconds": store.elapsed_seconds,
+        "records_per_second": store.records_per_second,
         "recent_insights": recent_insights,
         "records": records,
     }
@@ -513,6 +515,11 @@ def get_current_session():
 @app.post("/api/reset")
 def reset_session():
     clear_session_cache()
+    store.tolerances = {
+        "amount_tolerance": AMOUNT_TOLERANCE,
+        "date_tolerance": DATE_TOLERANCE_DAYS,
+        "fuzzy_threshold": FUZZY_MATCH_THRESHOLD,
+    }
     store.bank_df = None
     store.invoices_df = None
     store.payments_df = None
@@ -527,6 +534,8 @@ def reset_session():
     store.executive_summary = None
     store.resolved_overrides.clear()
     store.dataset_label = None
+    store.elapsed_seconds = None
+    store.records_per_second = None
     return {"status": "success", "message": "Session reset successfully"}
 
 

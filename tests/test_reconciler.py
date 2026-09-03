@@ -4,7 +4,7 @@ import pytest
 import pandas as pd
 from datetime import date
 
-from src.ingestion import load_all_data
+from src.ingestion import load_all_data, read_tabular_file, normalize_dataframe_columns
 from src.reconciler import (
     detect_duplicates,
     match_by_reference,
@@ -278,3 +278,16 @@ class TestRuntimeTolerances:
         date_mismatches_relaxed = [r for r in res_relaxed if r.status == STATUS_DATE_MISMATCH]
 
         assert len(date_mismatches_strict) > len(date_mismatches_relaxed)
+ 
+ 
+def test_independent_antigravity_accuracy():
+    bank = normalize_dataframe_columns(read_tabular_file('data/antigravity test/bank.csv'), 'bank')
+    inv  = normalize_dataframe_columns(read_tabular_file('data/antigravity test/invoices.csv'), 'invoice')
+    pay  = normalize_dataframe_columns(read_tabular_file('data/antigravity test/payment.csv'), 'payment')
+    gt   = pd.read_csv('data/antigravity test/truth.csv')
+    gt['expected_invoice_id'] = gt['expected_invoice_id'].fillna('')
+
+    results = reconcile(bank, inv, pay, verbose=False)
+    metrics = measure_accuracy(results, gt, verbose=False)
+    assert metrics['accuracy'] >= 95.0  # headroom above the current 97.5%, not pinned to it
+

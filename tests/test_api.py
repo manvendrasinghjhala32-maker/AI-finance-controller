@@ -39,6 +39,9 @@ def test_get_dashboard_data():
     assert summary["duplicate_count"] == 10
     assert summary["match_rate"] > 70.0
     assert "cash_position" in summary
+    assert "elapsed_seconds" in summary
+    assert "records_per_second" in summary
+    assert summary["records_per_second"] > 0
 
     # Check Records
     records = data["records"]

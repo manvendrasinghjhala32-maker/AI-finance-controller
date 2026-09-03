@@ -63,7 +63,16 @@ def main():
     # Phase 3: Reconciliation Engine
     # --------------------------------------------------
 
-    results = reconcile(bank, invoices, payments, verbose=True)
+    import time
+
+    t0 = time.perf_counter()
+    results = reconcile(bank, invoices, payments, verbose=False)
+    elapsed = time.perf_counter() - t0
+
+    print(
+        f"\nProcessed {len(bank)} records in {elapsed:.3f}s "
+        f"({len(bank) / elapsed:.0f} records/sec)"
+    )
     metrics = measure_accuracy(results, ground_truth, verbose=True)
 
     # --------------------------------------------------
@@ -119,6 +128,7 @@ def main():
         cash_position=cash_position,
         executive_summary=executive_summary,
         report_paths=report_paths,
+        elapsed=elapsed,
         verbose=True,
     )
 

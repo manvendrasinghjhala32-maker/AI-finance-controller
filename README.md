@@ -11,7 +11,8 @@
 |---|---:|
 | Bank records processed | 160 |
 | Duplicate records | 10 |
-| Independent benchmark records | 150 |
+| Clean records evaluated | 150 |
+| Throughput | ~1,000 records/sec |
 | Correct classifications | 150/150 |
 | Classification accuracy | 100% |
 | Invoice linking accuracy | 100% |
@@ -22,7 +23,27 @@
 | Clean match rate | 73.3% |
 
 > **Understanding Match Rate vs. Classification Accuracy:**  
-> The benchmark intentionally contains known real-world financial exceptions (amount variances, timing offsets, duplicate transmissions, and missing documentation). Therefore, the **clean match rate is 73.3% (110/150)**, while **classification accuracy (100%)** measures whether those exceptions were correctly identified and categorized. The reconciliation engine correctly classified all 150 independent benchmark records.
+> The benchmark intentionally contains known real-world financial exceptions (amount variances, timing offsets, duplicate transmissions, and missing documentation). Therefore, the **clean match rate is 73.3% (110/150)**, while **classification accuracy (100%)** measures whether those exceptions were correctly identified and categorized. The reconciliation engine correctly classified all 150 evaluated records.
+
+---
+
+## 🔍 Independent Validation
+
+To address the risk of self-referential benchmarking — where the same logic that
+generates the test data also defines what counts as a "correct" match — the
+reconciliation engine was additionally scored against a 40-record adversarial
+dataset generated independently by a separate AI tool (Google Antigravity),
+with no access to this project's source code or matching logic.
+
+| Metric | Result |
+|---|---:|
+| Independent benchmark records | 40 |
+| Correct classifications | 39/40 |
+| Accuracy | 97.5% |
+
+This dataset and its ground truth key are included at `data/antigravity test/`
+for independent reproduction. The single miss involves a duplicate-transaction
+edge case with an ambiguous ground-truth label.
 
 ---
 

@@ -205,6 +205,7 @@ def print_final_report(
     cash_position: dict,
     executive_summary: Optional[str] = None,
     report_paths: Optional[dict] = None,
+    elapsed: Optional[float] = None,
     verbose: bool = True,
 ):
     """Print a clean, structured final report to console."""
@@ -229,6 +230,10 @@ def print_final_report(
     match_rate = (match_count / non_dup_total * 100) if non_dup_total > 0 else 0
 
     print(f"\n  THROUGHPUT")
+    if elapsed is not None and elapsed > 0:
+        print(f"  Processed {total} records in {elapsed:.3f}s ({total / elapsed:.0f} records/sec)")
+        print(f"  {'Reconciliation speed':<32}: {total / elapsed:,.0f} records/sec")
+        print(f"  {'Elapsed execution time':<32}: {elapsed:.3f}s")
     print(f"  {'Total records processed':<32}: {total:>8}")
     print(f"  {'Duplicates detected & removed':<32}: {status_counts.get(STATUS_DUPLICATE, 0):>8}")
     print(f"  {'Clean records evaluated':<32}: {non_dup_total:>8}")
@@ -256,8 +261,9 @@ def print_final_report(
 
     if executive_summary:
         print(f"\n  EXECUTIVE SUMMARY")
-        # Wrap text at ~70 chars
-        words = executive_summary.split()
+        # Normalize non-ASCII currency symbol for Windows console compatibility
+        safe_summary = executive_summary.replace("₹", "Rs.")
+        words = safe_summary.split()
         line = "  "
         for word in words:
             if len(line) + len(word) + 1 > 70:
