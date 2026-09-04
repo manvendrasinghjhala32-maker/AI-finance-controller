@@ -45,135 +45,134 @@ export function GLEntriesView({ onExport }) {
   return (
     <div className="space-y-5 max-w-[1600px] mx-auto pb-10">
       {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2.5">
-            <img src="/finance_logo.png" alt="Accounting Records" className="w-8 h-8 rounded-lg object-contain" />
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              Accounting Records
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
+              General Ledger Journal Entries
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 font-semibold">
-              Proposed Double-Entry Adjustments
+            <span className="px-2 py-0.2 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              GAAP DOUBLE-ENTRY COMPLIANT
             </span>
           </div>
-          <p className="text-xs text-slate-400 font-mono mt-0.5">
-            Proposed double-entry accounting adjustments requiring human review and approval before posting
+          <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+            Proposed adjusting journal vouchers (AJV) generated for controller audit and ERP system ingestion
           </p>
         </div>
 
         {onExport && (
           <button
             onClick={() => onExport('gl_entries')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-emerald-400 bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-emerald-500/40 shadow-sm transition-all duration-200 btn-interactive"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono text-emerald-400 bg-[#141A27] hover:bg-[#1B2335] border border-emerald-500/30 transition-colors self-start sm:self-auto"
           >
-            <Download className="w-4 h-4" />
-            <span className="font-mono">Export Accounting Records (CSV)</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Journal (CSV)</span>
           </button>
         )}
       </div>
 
       {/* 2. Top Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="figma-card p-4 bg-[#171717] border border-[#2F2F2F] card-interactive">
-          <span className="text-[11px] font-mono font-semibold text-slate-400 uppercase">
-            MONEY ADDED (DEBITS)
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            TOTAL DEBITS
           </span>
-          <div className="text-2xl font-bold font-mono text-emerald-400 mt-2">
+          <div className="text-xl font-bold font-mono text-emerald-400 mt-1.5">
             ₹{totalDebit.toLocaleString('en-IN')}
           </div>
-          <span className="text-[11px] text-slate-400 font-mono mt-0.5 block">
-            Fee & price adjustments
+          <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
+            Expense & fee adjustments
           </span>
         </div>
 
-        <div className="figma-card p-4 bg-[#171717] border border-[#2F2F2F] card-interactive">
-          <span className="text-[11px] font-mono font-semibold text-slate-400 uppercase">
-            MONEY DEDUCTED (CREDITS)
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            TOTAL CREDITS
           </span>
-          <div className="text-2xl font-bold font-mono text-cyan-300 mt-2">
+          <div className="text-xl font-bold font-mono text-blue-300 mt-1.5">
             ₹{totalCredit.toLocaleString('en-IN')}
           </div>
-          <span className="text-[11px] text-slate-400 font-mono mt-0.5 block">
+          <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
             Offsetting clearing accounts
           </span>
         </div>
 
-        <div className="figma-card p-4 bg-[#171717] border border-[#2F2F2F] card-interactive">
-          <span className="text-[11px] font-mono font-semibold text-slate-400 uppercase">
-            BALANCE CHECK
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            TRIAL BALANCE AUDIT
           </span>
-          <div className="text-2xl font-bold font-mono text-white mt-2 flex items-center gap-2">
-            <span>₹{Math.abs(totalDebit - totalCredit).toFixed(2)}</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-[#2F2F2F] text-emerald-400 font-mono border border-emerald-500/30">
+          <div className="text-xl font-bold font-mono text-white mt-1.5 flex items-center gap-2">
+            <span>Δ ₹{Math.abs(totalDebit - totalCredit).toFixed(2)}</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/20">
               {Math.abs(totalDebit - totalCredit) < 0.01 ? 'BALANCED' : 'UNBALANCED'}
             </span>
           </div>
-          <span className="text-[11px] text-slate-400 font-mono mt-0.5 block">
-            Added equals Deducted (Verified)
+          <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
+            Debits equal Credits (Zero variance)
           </span>
         </div>
 
-        <div className="figma-card p-4 bg-[#171717] border border-[#2F2F2F] card-interactive">
-          <span className="text-[11px] font-mono font-semibold text-slate-400 uppercase">
-            TOTAL ENTRIES
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            JOURNAL VOUCHERS
           </span>
-          <div className="text-2xl font-bold font-mono text-white mt-2">
+          <div className="text-xl font-bold font-mono text-white mt-1.5">
             {entries.length} lines
           </div>
-          <span className="text-[11px] text-slate-400 font-mono mt-0.5 block">
-            Auto-balanced records
+          <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
+            Balanced adjusting ledger lines
           </span>
         </div>
       </div>
 
       {/* 3. Main Journal Table */}
-      <div className="figma-card overflow-hidden shadow-xl bg-[#171717] border border-[#2F2F2F]">
+      <div className="figma-card overflow-hidden shadow-sm bg-[#111622] border border-[#1E2638]">
         {/* Table Search Header */}
-        <div className="p-4 border-b border-[#2F2F2F] bg-[#171717] flex items-center justify-between gap-4">
+        <div className="p-3.5 border-b border-[#1E2638] bg-[#111622] flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 font-mono text-xs text-slate-300">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-            <span className="font-bold text-white">Accounting Journal Entries</span>
-            <span className="text-slate-400">({filteredEntries.length} records)</span>
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="font-bold text-white uppercase text-[11px]">General Ledger Audit Records</span>
+            <span className="text-slate-500 font-mono">({filteredEntries.length} lines)</span>
           </div>
 
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search account name, note, entry ID..."
+              placeholder="Filter account, memo, voucher ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-xs bg-[#2F2F2F] border border-[#3A3A3A] rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-64 font-mono"
+              className="w-full pl-8 pr-2.5 py-1 text-xs bg-[#141A27] border border-[#1E2638] rounded text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
             />
           </div>
         </div>
 
         {/* Table Data */}
-        <div className="overflow-x-auto bg-[#171717]">
+        <div className="overflow-x-auto bg-[#0E131E]">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#171717] border-b border-[#2F2F2F] text-[11px] font-mono uppercase tracking-wider text-slate-400">
+            <thead className="bg-[#0E131E] border-b border-[#1E2638] text-[10px] font-mono uppercase tracking-wider text-slate-400">
               <tr>
-                <th className="py-3 px-4 font-semibold">ENTRY ID</th>
-                <th className="py-3 px-4 font-semibold">DATE</th>
-                <th className="py-3 px-4 font-semibold">ACCOUNT NAME & CODE</th>
-                <th className="py-3 px-4 font-semibold">TRANSACTION ID</th>
-                <th className="py-3 px-4 font-semibold text-right">ADDED / DEBIT (₹)</th>
-                <th className="py-3 px-4 font-semibold text-right">DEDUCTED / CREDIT (₹)</th>
-                <th className="py-3 px-4 font-semibold">NOTE / REASON</th>
-                <th className="py-3 px-4 font-semibold text-center">STATUS</th>
+                <th className="py-2.5 px-3 font-semibold">VOUCHER ID</th>
+                <th className="py-2.5 px-3 font-semibold">DATE</th>
+                <th className="py-2.5 px-3 font-semibold">ACCOUNT & GL CODE</th>
+                <th className="py-2.5 px-3 font-semibold">TRANSACTION REF</th>
+                <th className="py-2.5 px-3 font-semibold text-right">DEBIT (₹)</th>
+                <th className="py-2.5 px-3 font-semibold text-right">CREDIT (₹)</th>
+                <th className="py-2.5 px-3 font-semibold">MEMO / DESCRIPTION</th>
+                <th className="py-2.5 px-3 font-semibold text-center">AUDIT STATUS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2F2F2F] text-xs font-mono">
+            <tbody className="divide-y divide-[#1E2638] text-xs font-mono">
               {loading ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-slate-400">
-                    Loading accounting records...
+                  <td colSpan="8" className="py-10 text-center text-slate-400 font-mono text-xs">
+                    Loading General Ledger journal vouchers...
                   </td>
                 </tr>
               ) : filteredEntries.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-slate-400">
-                    No journal entries found.
+                  <td colSpan="8" className="py-10 text-center text-slate-400 font-mono text-xs">
+                    No matching journal entries found.
                   </td>
                 </tr>
               ) : (
@@ -187,48 +186,48 @@ export function GLEntriesView({ onExport }) {
                   const memo = row.memo || row.Memo || 'Adjusting entry';
 
                   return (
-                    <tr key={idx} className="hover:bg-[#3A3A3A]/40 transition-colors">
+                    <tr key={idx} className="hover:bg-[#141A27] transition-colors">
                       {/* Entry ID */}
-                      <td className="py-3 px-4 font-bold text-emerald-400">
+                      <td className="py-2.5 px-3 font-semibold text-emerald-400">
                         {entryId}
                       </td>
 
                       {/* Date */}
-                      <td className="py-3 px-4 text-slate-400">
+                      <td className="py-2.5 px-3 text-slate-400">
                         {dt}
                       </td>
 
                       {/* Account */}
-                      <td className="py-3 px-4">
-                        <span className="font-semibold text-white">
+                      <td className="py-2.5 px-3">
+                        <span className="font-medium text-white">
                           {acct}
                         </span>
                       </td>
 
                       {/* Linked Txn */}
-                      <td className="py-3 px-4 text-slate-300">
+                      <td className="py-2.5 px-3 text-slate-300">
                         {txId}
                       </td>
 
                       {/* Debit */}
-                      <td className="py-3 px-4 text-right font-bold text-emerald-400">
+                      <td className="py-2.5 px-3 text-right font-semibold text-emerald-400">
                         {debit > 0 ? `₹${debit.toLocaleString('en-IN')}` : '—'}
                       </td>
 
                       {/* Credit */}
-                      <td className="py-3 px-4 text-right font-bold text-cyan-300">
+                      <td className="py-2.5 px-3 text-right font-semibold text-blue-300">
                         {credit > 0 ? `₹${credit.toLocaleString('en-IN')}` : '—'}
                       </td>
 
                       {/* Memo */}
-                      <td className="py-3 px-4 max-w-[240px] truncate text-slate-300 font-sans" title={memo}>
+                      <td className="py-2.5 px-3 max-w-[240px] truncate text-slate-300 font-sans" title={memo}>
                         {memo}
                       </td>
 
                       {/* Status */}
-                      <td className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 bg-[#2F2F2F] text-emerald-400 rounded border border-emerald-500/30">
-                          <Check className="w-2.5 h-2.5" /> READY
+                      <td className="py-2.5 px-3 text-center">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.2 bg-emerald-500/10 text-emerald-400 rounded border border-emerald-500/20">
+                          <Check className="w-2.5 h-2.5" /> POSTABLE
                         </span>
                       </td>
                     </tr>

@@ -529,6 +529,130 @@ Return ONLY the summary text."""
 # 6. Autonomous Financial Copilot (Q&A with Data Access)
 # --------------------------------------------------
 
+# Terms that indicate a question is actually about this reconciliation dataset.
+# If a question matches none of these, and doesn't name a specific transaction ID
+# or known merchant, it's treated as off-topic and answered without calling the LLM.
+_DOMAIN_TERMS = (
+    "transaction", "invoice", "vendor", "merchant", "seller", "amount", "date",
+    "duplicate", "match", "exception", "cash", "forecast", "gl", "reconcil",
+    "audit", "summary", "recap", "total", "report", "payment", "bank",
+    "discrepanc", "mismatch", "risk", "overview", "batch", "record", "status",
+    "how many", "how much", "runway", "ledger", "journal", "clean",
+)
+
+# Common greetings / small talk that deserve a friendly reply, not a data dump
+# and not an "I can't help with that" decline either.
+_GREETING_PATTERNS = (
+    "hi", "hii", "hiii", "hello", "hey", "heyy", "yo", "sup",
+    "good morning", "good afternoon", "good evening", "howdy",
+    "thanks", "thank you", "thx", "ok", "okay", "cool", "great", "nice",
+)
+
+
+def _normalize_query(question: str) -> str:
+    return question.strip().lower().strip("!?. ")
+
+
+def _is_greeting_or_smalltalk(question: str) -> bool:
+    """True for bare greetings/acknowledgements with no real content, e.g. 'hi', 'thanks'."""
+    q = _normalize_query(question)
+    if not q:
+        return True
+    # Only treat it as pure small talk if it's short and matches a known pattern
+    # almost exactly — this must never accidentally swallow a real question like
+    # "hey, why is TX0004 flagged?" (that contains domain terms, handled separately).
+    if len(q.split()) <= 3 and any(q == p or q.startswith(p) for p in _GREETING_PATTERNS):
+        if not any(term in q for term in _DOMAIN_TERMS):
+            return True
+    return False
+
+
+def _mentions_specific_entity(question: str, results: List["ReconciliationResult"], bank_df) -> bool:
+    """True if the question names a specific transaction ID or a known merchant/vendor."""
+    q_upper = question.upper()
+    if any(r.transaction_id.upper() in q_upper for r in results):
+        return True
+    if bank_df is not None and "description" in bank_df.columns:
+        for m in bank_df["description"].dropna().unique():
+            if isinstance(m, str) and len(m) >= 3 and m.lower() in question.lower():
+                return True
+    return False
+
+
+def _is_offtopic_query(question: str, results: List["ReconciliationResult"], bank_df) -> bool:
+    """True if the question has nothing to do with this reconciliation dataset."""
+    q = _normalize_query(question)
+    if not q:
+        return False  # empty handled by greeting check
+    if _mentions_specific_entity(question, results, bank_df):
+        return False
+    return not any(term in q for term in _DOMAIN_TERMS)
+
+
+def _is_generic_summary_query(question: str, results: List["ReconciliationResult"], bank_df) -> bool:
+    """True for broad questions ('overall summary', 'how many exceptions') with no
+    specific transaction/vendor named — these should use the aggregate numbers,
+    never a single-transaction deep dive."""
+    q = _normalize_query(question)
+    if _mentions_specific_entity(question, results, bank_df):
+        return False
+    generic_terms = ("overall", "summary", "recap", "total", "how many", "how much",
+                      "status", "overview", "big picture", "high level")
+    return any(term in q for term in generic_terms)
+
+
+def _greeting_reply() -> str:
+    return (
+        "Hey! I'm here to help with this reconciliation batch. You can ask me things like "
+        "\"why is TX0004 flagged?\", \"give me the overall summary\", or ask about a specific "
+        "vendor. What would you like to know?"
+    )
+
+
+def _offtopic_reply() -> str:
+    return (
+        "That's outside what I can help with here — I'm scoped to this reconciliation batch "
+        "(transactions, invoices, payments, mismatches, and cash forecasting). "
+        "Try asking something like \"what happened with TX0004?\" or \"give me the overall summary.\""
+    )
+
+
+def _deterministic_overall_summary(
+    results: List["ReconciliationResult"],
+    status_counts: Dict[str, int],
+) -> str:
+    """A short, human, aggregate-only summary. Used both as the LLM fallback and as
+    the direct answer for generic summary questions, so a vague question can never
+    fixate on one transaction."""
+    total = len(results)
+    clean = status_counts.get(STATUS_MATCH, 0)
+    dupes = status_counts.get(STATUS_DUPLICATE, 0)
+    exceptions = total - clean - dupes
+    amt = status_counts.get(STATUS_AMOUNT_MISMATCH, 0)
+    date = status_counts.get(STATUS_DATE_MISMATCH, 0)
+    missing = status_counts.get(STATUS_MISSING_INVOICE, 0)
+
+    lines = [
+        f"Here's the overall picture: out of **{total} transactions**, **{clean} matched cleanly**"
+        + (f" and **{dupes} were duplicates** we isolated" if dupes else "")
+        + f", leaving **{exceptions} that need a look**."
+    ]
+    parts = []
+    if amt:
+        parts.append(f"{amt} with amount differences")
+    if date:
+        parts.append(f"{date} with date differences")
+    if missing:
+        parts.append(f"{missing} missing an invoice")
+    if parts:
+        lines.append("That breaks down to " + ", ".join(parts) + ".")
+    lines.append(
+        "You can ask about any specific transaction (e.g. \"what's up with TX0004?\"), "
+        "a vendor, or head to the Exception Ledger tab to work through them one by one."
+    )
+    return " ".join(lines)
+
+
 def ask_question(
     question: str,
     results: List[ReconciliationResult],
@@ -546,6 +670,22 @@ def ask_question(
     status_counts = {}
     for r in results:
         status_counts[r.status] = status_counts.get(r.status, 0) + 1
+
+    # --- Deterministic pre-routing, before any LLM call ---
+    # A bare "hi" or "thanks" should get a friendly nudge, not a data dump.
+    if _is_greeting_or_smalltalk(question):
+        return _greeting_reply()
+
+    # A question genuinely unrelated to this dataset should be declined clearly,
+    # never sent to the LLM (which might otherwise try to answer it anyway).
+    if _is_offtopic_query(question, results, bank_df):
+        return _offtopic_reply()
+
+    # A broad "give me the overall summary" style question must never fixate on
+    # a single transaction just because that transaction happens to be first in
+    # the context payload. Answer it deterministically and skip the LLM entirely.
+    if _is_generic_summary_query(question, results, bank_df):
+        return _deterministic_overall_summary(results, status_counts)
 
     # Detailed inventory of all exceptions
     exceptions_detail = []
@@ -607,27 +747,23 @@ DATASET:
 USER QUESTION:
 {question}
 
-RESPONSE FORMAT REQUIREMENTS:
-You MUST structure your response systematically using these 3 clean sections:
+RESPONSE STYLE:
+Answer like a knowledgeable colleague explaining this at someone's desk — clear, warm,
+and direct. Default to plain sentences and short paragraphs. Keep the length proportional
+to the question: a quick question gets a quick answer, not a forced report.
 
-### 📌 1. Simple Summary
-- Give 1 to 2 clear, simple sentences directly answering the question with the main facts, amounts in ₹, and counts.
-
-### 📊 2. Breakdown of Differences
-- Present the figures in a clean Markdown Table or simple bullet points.
-- When listing transactions or sellers, always use a clean Markdown Table:
-  | ID / Seller | Status | Bank (₹) | Invoice (₹) | Difference (₹) | Online Status | Simple Explanation |
-- Format all currency cleanly with ₹ (e.g. ₹15,128.00).
-
-### 🎯 3. Steps to Fix & Recommendations
-- Provide numbered, easy-to-follow steps to fix any differences or missing bills.
-- If referencing account categories, use friendly labels:
-  • Bank Account (GL-1010)
-  • Unpaid Invoices / Money Owed (GL-1200)
-  • Payment Processing Fees (GL-6150)
-  • Pending / Unapplied Receipts (GL-2250)
-
-Tone: Clear, helpful, polite, structured, and easy to understand for everyday business users."""
+- Only use a markdown table when comparing 3 or more transactions or vendors side by side.
+  For one transaction or a quick fact, just say it in a sentence or two.
+- Only give numbered "next steps" when the user is asking what to DO about something
+  (fixing a mismatch, handling a missing invoice) — not for purely informational
+  questions like "how many transactions matched?"
+- Format currency clearly with ₹ (e.g. ₹15,128.00).
+- Avoid unexplained internal jargon (GL account codes, "workflow state," "forensic
+  findings") unless the question is specifically about bookkeeping/GL entries. If you
+  do reference a GL account, explain what it means in one plain clause,
+  e.g. "book this to Accounts Receivable (money customers still owe you)."
+- This question already relates to the reconciliation data (that's been verified before
+  reaching you) — answer it directly and specifically using the DATASET context above."""
 
     try:
         from dotenv import load_dotenv

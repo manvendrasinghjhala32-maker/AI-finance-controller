@@ -275,6 +275,8 @@ class ResolveAction(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    history: Optional[List[Dict[str, str]]] = None
+    focused_transaction_id: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -568,12 +570,20 @@ def ai_chat_copilot(req: ChatRequest):
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Empty prompt message.")
 
+    if store.results is None:
+        if not load_session_cache() or store.results is None:
+            run_pipeline(skip_llm=True)
+
     reply = ask_question(
         question=req.message,
-        results=store.results,
+        results=store.results or [],
         bank_df=store.bank_df,
         invoices_df=store.invoices_df,
         payments_df=store.payments_df,
+        metrics=store.metrics,
+        history=req.history,
+        resolved_overrides=store.resolved_overrides,
+        focused_transaction_id=req.focused_transaction_id,
         verbose=False,
     )
 

@@ -67,258 +67,264 @@ export function ReconciliationOverviewAndChat({
   });
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-5 pb-10">
       {/* ========================================================================= */}
-      {/* MAIN FINANCIAL & RECONCILIATION SUMMARY */}
+      {/* EXECUTIVE FINANCIAL & RECONCILIATION SUMMARY */}
       {/* ========================================================================= */}
-      <section className="bg-[#171717] border border-[#2F2F2F] rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+      <section className="bg-[#111622] border border-[#1E2638] rounded-xl p-5 sm:p-6 shadow-sm space-y-5">
         {/* Title Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2F2F2F] pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1E2638] pb-4">
           <div>
-            <h2 className="text-xl font-extrabold text-white tracking-tight">
-              📊 Overview & Matched Records
+            <h2 className="text-base font-bold text-white tracking-tight font-mono uppercase">
+              Executive Reconciliation Summary
             </h2>
-            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-              Summary of verified payments, amount differences, and issues to review.
+            <p className="text-xs text-slate-400 mt-0.5 font-sans">
+              Comprehensive ledger audit, verified transaction settlements, and cash variance analysis.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold px-3 py-1 bg-[#2F2F2F] text-purple-400 border border-purple-500/30 rounded-full font-mono flex items-center gap-1.5 shadow-sm">
-              <Zap className="w-3.5 h-3.5 text-purple-400" />
-              <span>{Math.round(throughputSpeed).toLocaleString()} records/sec ({elapsedSec.toFixed(3)}s)</span>
+            <span className="text-[11px] font-mono font-medium px-2.5 py-1 bg-[#141A27] text-slate-300 border border-[#1E2638] rounded">
+              <span className="text-emerald-400 font-bold">{records.length}</span> Total Records
             </span>
-            <span className="text-xs font-semibold px-3 py-1 bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 rounded-full font-mono">
-              {records.length} Total Records Checked
+            <span className="text-[11px] font-mono font-medium px-2.5 py-1 bg-[#141A27] text-slate-300 border border-[#1E2638] rounded">
+              Engine: <span className="text-purple-400 font-bold">{Math.round(throughputSpeed).toLocaleString()}</span> rec/s ({elapsedSec.toFixed(3)}s)
             </span>
           </div>
         </div>
 
-        {/* Top KPI Cards Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {/* Card 1: Total Records */}
-          <div className="bg-[#212121] rounded-xl border border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Transactions</div>
-            <div className="text-2xl font-black text-white">{records.length}</div>
-            <div className="text-xs text-slate-400 mt-1">🛡️ {duplicates.length} duplicates isolated</div>
+        {/* Executive KPI Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* KPI 1: Ingested Records */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 card-interactive">
+            <div className="text-[10px] font-medium font-mono text-slate-400 uppercase tracking-wider mb-1">Total Volume</div>
+            <div className="text-xl font-bold font-mono text-white">{records.length}</div>
+            <div className="text-[11px] text-slate-400 font-mono mt-1">{duplicates.length} duplicates isolated</div>
           </div>
 
-          {/* Card 2: Matched Rate */}
-          <div className="bg-[#212121] rounded-xl border-l-4 border-emerald-500 border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Matched Rate</div>
-            <div className="text-2xl font-black text-emerald-400">{cleanMatchRate.toFixed(1)}%</div>
-            <div className="text-xs text-emerald-400 font-medium mt-1">
-              🎯 Verified match rate ({matches.length}/{cleanTotal})
-            </div>
+          {/* KPI 2: Reconciliation Rate */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 card-interactive">
+            <div className="text-[10px] font-medium font-mono text-slate-400 uppercase tracking-wider mb-1">Match Rate</div>
+            <div className="text-xl font-bold font-mono text-emerald-400">{cleanMatchRate.toFixed(1)}%</div>
+            <div className="text-[11px] text-slate-400 font-mono mt-1">{matches.length} of {cleanTotal} matched</div>
           </div>
 
-          {/* Card 3: Verified Money */}
-          <div className="bg-[#212121] rounded-xl border-l-4 border-cyan-500 border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Verified Money</div>
-            <div className="text-2xl font-black text-cyan-300">₹{(cashPos.matched_amount || 0).toLocaleString()}</div>
-            <div className="text-xs text-cyan-400 font-medium mt-1">
-              💎 {matchedMoneyPct.toFixed(1)}% of total bank money
-            </div>
+          {/* KPI 3: Verified Settlement */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 card-interactive">
+            <div className="text-[10px] font-medium font-mono text-slate-400 uppercase tracking-wider mb-1">Verified Funds</div>
+            <div className="text-xl font-bold font-mono text-emerald-400">₹{(cashPos.matched_amount || 0).toLocaleString()}</div>
+            <div className="text-[11px] text-slate-400 font-mono mt-1">{matchedMoneyPct.toFixed(1)}% of total volume</div>
           </div>
 
-          {/* Card 4: Price Differences */}
-          <div className="bg-[#212121] rounded-xl border-l-4 border-rose-500 border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Price Differences</div>
-            <div className="text-2xl font-black text-rose-400">₹{(cashPos.total_variance || 0).toLocaleString()}</div>
-            <div className="text-xs text-rose-400 font-medium mt-1">
-              ⚠️ {amtMismatches.length} transactions with price differences
-            </div>
+          {/* KPI 4: Price Variances */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 card-interactive">
+            <div className="text-[10px] font-medium font-mono text-slate-400 uppercase tracking-wider mb-1">Net Variances</div>
+            <div className="text-xl font-bold font-mono text-rose-400">₹{(cashPos.total_variance || 0).toLocaleString()}</div>
+            <div className="text-[11px] text-slate-400 font-mono mt-1">{amtMismatches.length} fee/price deltas</div>
           </div>
 
-          {/* Card 5: Pending Money */}
-          <div className="bg-[#212121] rounded-xl border-l-4 border-amber-500 border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Pending Money</div>
-            <div className="text-2xl font-black text-amber-400">₹{(cashPos.pending_amount || 0).toLocaleString()}</div>
-            <div className="text-xs text-amber-400 font-medium mt-1">
-              ⏳ ₹{(cashPos.settled_amount || 0).toLocaleString()} completed
-            </div>
+          {/* KPI 5: Pending Money */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 card-interactive">
+            <div className="text-[10px] font-medium font-mono text-slate-400 uppercase tracking-wider mb-1">In-Transit / Pending</div>
+            <div className="text-xl font-bold font-mono text-amber-400">₹{(cashPos.pending_amount || 0).toLocaleString()}</div>
+            <div className="text-[11px] text-slate-400 font-mono mt-1">₹{(cashPos.settled_amount || 0).toLocaleString()} settled</div>
           </div>
 
-          {/* Card 6: Throughput Speed */}
-          <div className="bg-[#212121] rounded-xl border-l-4 border-purple-500 border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
-              <span>Throughput Speed</span>
-              <span className="text-purple-400">⚡</span>
+          {/* KPI 6: Processing Speed */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 card-interactive">
+            <div className="text-[10px] font-medium font-mono text-slate-400 uppercase tracking-wider mb-1">Throughput</div>
+            <div className="text-xl font-bold font-mono text-slate-200">
+              {Math.round(throughputSpeed).toLocaleString()} <span className="text-xs font-normal text-slate-400">rec/s</span>
             </div>
-            <div className="text-2xl font-black text-purple-300">
-              {Math.round(throughputSpeed).toLocaleString()} <span className="text-base font-normal text-purple-400">/s</span>
-            </div>
-            <div className="text-xs text-purple-400 font-medium mt-1 font-mono">
-              ⚡ {elapsedSec.toFixed(3)}s processing speed
-            </div>
+            <div className="text-[11px] text-slate-400 font-mono mt-1">{elapsedSec.toFixed(3)}s execution latency</div>
           </div>
         </div>
 
-        {/* AI Summary & Insights */}
-        <div className="p-6 rounded-2xl bg-[#212121] border border-emerald-500/30 shadow-md card-interactive">
-          <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm uppercase tracking-wider mb-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            AI Summary & Key Insights
+        {/* Executive Forensic Briefing */}
+        <div className="p-4 rounded-lg bg-[#0E131E] border border-[#1E2638] space-y-1.5">
+          <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            EXECUTIVE BRIEFING & FINDINGS
           </div>
-          <p className="text-slate-200 text-sm sm:text-base leading-relaxed">
+          <p className="text-slate-200 text-xs sm:text-sm leading-relaxed font-sans">
             {summary.executive_summary || (
-              `We checked ${records.length} records and found ${matches.length} clean matches (${cleanMatchRate.toFixed(1)}% match rate). ` +
-              `There are ${exceptions.length} active exceptions that need review, with ₹${(cashPos.total_variance || 0).toLocaleString()} in total price differences and ₹${(cashPos.pending_amount || 0).toLocaleString()} in pending / unmatched funds.`
+              `Automated reconciliation verified ${matches.length} matching transactions (${cleanMatchRate.toFixed(1)}% match rate) across ${records.length} ingested records. ` +
+              `Identified ${exceptions.length} exceptions requiring review, totaling ₹${(cashPos.total_variance || 0).toLocaleString()} in net price/fee variances and ₹${(cashPos.pending_amount || 0).toLocaleString()} in pending transit funds.`
             )}
           </p>
         </div>
 
-        {/* Visual Breakdown Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Classification Breakdown */}
-          <div className="bg-[#212121] rounded-xl border border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
-              <span>Payment Status Breakdown</span>
-              <span className="text-slate-500 font-normal font-mono">{records.length} items</span>
-            </h3>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-emerald-300 transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Clean Matches</span>
-                <strong className="font-mono">{matches.length} ({cleanMatchRate.toFixed(0)}%)</strong>
+        {/* Visual Analytics Breakdown Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 1. Status Breakdown */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 space-y-3">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="font-semibold text-slate-300 uppercase text-[11px]">Classification Breakdown</span>
+              <span className="text-slate-500">{records.length} items</span>
+            </div>
+            <div className="space-y-1.5 text-xs font-mono">
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638] text-emerald-300">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  Reconciled Matches
+                </span>
+                <strong className="font-bold">{matches.length} ({cleanMatchRate.toFixed(0)}%)</strong>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-rose-300 transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5"><AlertOctagon className="w-4 h-4 text-rose-400" /> Price Differences</span>
-                <strong className="font-mono">{amtMismatches.length}</strong>
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638] text-rose-300">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                  Price / Fee Variances
+                </span>
+                <strong className="font-bold">{amtMismatches.length}</strong>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-cyan-300 transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-cyan-400" /> Date Delays</span>
-                <strong className="font-mono">{dateMismatches.length}</strong>
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638] text-blue-300">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                  Timing & Settlement Drift
+                </span>
+                <strong className="font-bold">{dateMismatches.length}</strong>
               </div>
-              <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-purple-300 transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5"><FileQuestion className="w-4 h-4 text-purple-400" /> Missing Bills / Receipts</span>
-                <strong className="font-mono">{missingInvoices.length}</strong>
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638] text-purple-300">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                  Unmatched Disbursements
+                </span>
+                <strong className="font-bold">{missingInvoices.length}</strong>
               </div>
               {multipleMatches.length > 0 && (
-                <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-amber-500/40 font-medium text-amber-300 transition-all hover:bg-[#383838]">
-                  <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-amber-400" /> Multiple Matches / Shared PO</span>
-                  <strong className="font-mono">{multipleMatches.length}</strong>
+                <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638] text-amber-300">
+                  <span className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    Multi-Match Candidates
+                  </span>
+                  <strong className="font-bold">{multipleMatches.length}</strong>
                 </div>
               )}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] font-medium text-slate-300 transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5"><Copy className="w-4 h-4 text-slate-400" /> Duplicate Payments</span>
-                <strong className="font-mono">{duplicates.length}</strong>
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638] text-slate-400">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                  Duplicate Entries
+                </span>
+                <strong className="font-bold">{duplicates.length}</strong>
               </div>
             </div>
           </div>
 
-          {/* Cash Position Breakdown */}
-          <div className="bg-[#212121] rounded-xl border border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
-              <span>Money Overview (₹)</span>
-              <span className="text-slate-500 font-mono text-[11px]">Total: ₹{totalBankMoney.toLocaleString()}</span>
-            </h3>
-            <div className="space-y-3 text-xs">
+          {/* 2. Cash Allocation */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 space-y-3">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="font-semibold text-slate-300 uppercase text-[11px]">Ledger Allocation (₹)</span>
+              <span className="text-slate-500">Total: ₹{totalBankMoney.toLocaleString()}</span>
+            </div>
+            <div className="space-y-2.5 text-xs font-mono">
               <div>
-                <div className="flex justify-between font-semibold text-slate-300 mb-1">
-                  <span>Verified & Matched Money</span>
-                  <span className="text-emerald-400 font-bold font-mono">₹{(cashPos.matched_amount || 0).toLocaleString()}</span>
+                <div className="flex justify-between text-slate-300 mb-1">
+                  <span>Verified Funds</span>
+                  <span className="text-emerald-400 font-bold">₹{(cashPos.matched_amount || 0).toLocaleString()}</span>
                 </div>
-                <div className="w-full bg-[#2F2F2F] rounded-full h-2 overflow-hidden">
-                  <div className="bg-emerald-500 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${matchedMoneyPct}%` }} />
+                <div className="w-full bg-[#141A27] rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${matchedMoneyPct}%` }} />
                 </div>
               </div>
               <div>
-                <div className="flex justify-between font-semibold text-slate-300 mb-1">
-                  <span>Completed Online Payments</span>
-                  <span className="text-cyan-400 font-bold font-mono">₹{(cashPos.settled_amount || 0).toLocaleString()}</span>
+                <div className="flex justify-between text-slate-300 mb-1">
+                  <span>Settled Gateways</span>
+                  <span className="text-blue-400 font-bold">₹{(cashPos.settled_amount || 0).toLocaleString()}</span>
                 </div>
-                <div className="w-full bg-[#2F2F2F] rounded-full h-2 overflow-hidden">
-                  <div className="bg-cyan-500 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${settledMoneyPct}%` }} />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between font-semibold text-slate-300 mb-1">
-                  <span>Pending / Unmatched Money</span>
-                  <span className="text-amber-400 font-bold font-mono">₹{(cashPos.pending_amount || 0).toLocaleString()}</span>
-                </div>
-                <div className="w-full bg-[#2F2F2F] rounded-full h-2 overflow-hidden">
-                  <div className="bg-amber-500 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${pendingMoneyPct}%` }} />
+                <div className="w-full bg-[#141A27] rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-blue-500 h-full rounded-full" style={{ width: `${settledMoneyPct}%` }} />
                 </div>
               </div>
               <div>
-                <div className="flex justify-between font-semibold text-slate-300 mb-1">
-                  <span>Total Amount Differences</span>
-                  <span className="text-rose-400 font-bold font-mono">₹{(cashPos.total_variance || 0).toLocaleString()}</span>
+                <div className="flex justify-between text-slate-300 mb-1">
+                  <span>Pending / Transit Funds</span>
+                  <span className="text-amber-400 font-bold">₹{(cashPos.pending_amount || 0).toLocaleString()}</span>
                 </div>
-                <div className="w-full bg-[#2F2F2F] rounded-full h-2 overflow-hidden">
-                  <div className="bg-rose-500 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${varianceMoneyPct}%` }} />
+                <div className="w-full bg-[#141A27] rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-amber-500 h-full rounded-full" style={{ width: `${pendingMoneyPct}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-slate-300 mb-1">
+                  <span>Net Price Variances</span>
+                  <span className="text-rose-400 font-bold">₹{(cashPos.total_variance || 0).toLocaleString()}</span>
+                </div>
+                <div className="w-full bg-[#141A27] rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-rose-500 h-full rounded-full" style={{ width: `${varianceMoneyPct}%` }} />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Issue Priority Level (Risk Matrix) */}
-          <div className="bg-[#212121] rounded-xl border border-[#2F2F2F] p-5 shadow-sm card-interactive">
-            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center justify-between">
-              <span>Issue Priority Level</span>
-              <span className="text-emerald-400 font-mono text-[11px]">{records.length} Total Checked</span>
-            </h3>
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5 text-emerald-400 font-bold">🟢 LOW RISK</span>
-                <span className="text-slate-300 font-mono font-semibold">{matches.length} Clean Matches</span>
+          {/* 3. Variance Risk Classification */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] p-4 space-y-3">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="font-semibold text-slate-300 uppercase text-[11px]">Audit Priority Matrix</span>
+              <span className="text-slate-500">{records.length} Checked</span>
+            </div>
+            <div className="space-y-1.5 text-xs font-mono">
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638]">
+                <span className="text-emerald-400 font-medium">LOW RISK</span>
+                <span className="text-slate-300">{matches.length} Clean Matches</span>
               </div>
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5 text-cyan-400 font-bold">🔵 MEDIUM RISK</span>
-                <span className="text-slate-300 font-mono font-semibold">{dateMismatches.length} Date Delays</span>
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638]">
+                <span className="text-blue-400 font-medium">MEDIUM RISK</span>
+                <span className="text-slate-300">{dateMismatches.length} Timing Delays</span>
               </div>
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5 text-amber-400 font-bold">🟡 HIGH RISK</span>
-                <span className="text-slate-300 font-mono font-semibold">{amtMismatches.length} Price Differences</span>
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638]">
+                <span className="text-amber-400 font-medium">HIGH RISK</span>
+                <span className="text-slate-300">{amtMismatches.length} Price Deltas</span>
               </div>
               {multipleMatches.length > 0 && (
-                <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#2F2F2F] border border-amber-500/40 transition-all hover:bg-[#383838]">
-                  <span className="flex items-center gap-1.5 text-amber-400 font-bold">🟠 AMBIGUOUS</span>
-                  <span className="text-slate-300 font-mono font-semibold">{multipleMatches.length} Multiple Matches / Shared PO</span>
+                <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638]">
+                  <span className="text-amber-300 font-medium">AMBIGUOUS</span>
+                  <span className="text-slate-300">{multipleMatches.length} Multi-Matches</span>
                 </div>
               )}
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#2F2F2F] border border-[#3A3A3A] transition-all hover:bg-[#383838]">
-                <span className="flex items-center gap-1.5 text-rose-400 font-bold">🔴 NEEDS ACTION</span>
-                <span className="text-slate-300 font-mono font-semibold">{missingInvoices.length} Missing Bills</span>
+              <div className="flex items-center justify-between p-2 rounded bg-[#141A27] border border-[#1E2638]">
+                <span className="text-rose-400 font-medium">ACTION REQUIRED</span>
+                <span className="text-slate-300">{missingInvoices.length} Unbilled Items</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Collapsible Action Drawers */}
-        <div className="space-y-3 pt-2">
-          {/* Drawer 1: Differences & Issues Drawer */}
-          <div className="bg-[#212121] rounded-xl border border-[#2F2F2F] overflow-hidden shadow-sm">
+        <div className="space-y-2 pt-1">
+          {/* Drawer 1: Variances & Exceptions */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] overflow-hidden">
             <button 
               onClick={() => setOpenDrawer(openDrawer === 'exceptions' ? null : 'exceptions')}
-              className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-[#2F2F2F] transition"
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#141A27] transition-colors"
             >
-              <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-lg bg-[#2F2F2F] text-amber-400 flex items-center justify-center font-bold text-xs">⚠️</span>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  {exceptions.length} Variances
+                </span>
                 <div>
-                  <h4 className="text-sm font-bold text-white">
-                    Differences & Issues to Review ({exceptions.length} Items)
+                  <h4 className="text-xs font-bold text-white font-mono uppercase tracking-wide">
+                    Variance Ledger & Resolution Workbench
                   </h4>
-                  <p className="text-xs text-slate-400">Click to see AI explanations and 1-click quick fix buttons</p>
+                  <p className="text-[11px] text-slate-400 font-sans">Review forensic root-cause analysis and execute single-click journal approvals</p>
                 </div>
               </div>
-              {openDrawer === 'exceptions' ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+              {openDrawer === 'exceptions' ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
             </button>
 
             {openDrawer === 'exceptions' && (
-              <div className="p-6 border-t border-[#2F2F2F] bg-[#171717] space-y-4">
+              <div className="p-4 border-t border-[#1E2638] bg-[#0E131E] space-y-3">
                 {/* Filter Pills */}
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {[
-                    { id: 'ALL', label: `All Issues (${exceptions.length})` },
-                    { id: 'AMOUNT_MISMATCH', label: `Price Differences (${amtMismatches.length})` },
-                    { id: 'DATE_MISMATCH', label: `Date Delays (${dateMismatches.length})` },
-                    { id: 'MISSING_INVOICE', label: `Missing Bills (${missingInvoices.length})` },
-                    ...(multipleMatches.length > 0 ? [{ id: 'MULTIPLE_MATCHES', label: `Multiple Matches (${multipleMatches.length})` }] : [])
+                    { id: 'ALL', label: `All Variances (${exceptions.length})` },
+                    { id: 'AMOUNT_MISMATCH', label: `Price Deltas (${amtMismatches.length})` },
+                    { id: 'DATE_MISMATCH', label: `Timing Drift (${dateMismatches.length})` },
+                    { id: 'MISSING_INVOICE', label: `Unbilled Items (${missingInvoices.length})` },
+                    ...(multipleMatches.length > 0 ? [{ id: 'MULTIPLE_MATCHES', label: `Multi-Match (${multipleMatches.length})` }] : [])
                   ].map(f => (
                     <button
                       key={f.id}
                       onClick={() => setActiveFilter(f.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${activeFilter === f.id ? 'bg-emerald-600 text-white shadow-sm' : 'bg-[#2F2F2F] text-slate-300 border border-[#3A3A3A] hover:bg-[#3A3A3A]'}`}
+                      className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${activeFilter === f.id ? 'bg-[#1E2638] text-emerald-400 border border-emerald-500/40 font-semibold' : 'bg-[#141A27] text-slate-400 border border-[#1E2638] hover:bg-[#182030] hover:text-slate-200'}`}
                     >
                       {f.label}
                     </button>
@@ -326,59 +332,59 @@ export function ReconciliationOverviewAndChat({
                 </div>
 
                 {/* Exception Cards */}
-                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
                   {filteredExceptions.map((r) => {
                     const isResolved = resolvedTxs.has(r.transaction_id) || r.is_resolved;
                     const statusLabel = r.status === 'AMOUNT_MISMATCH' 
-                      ? 'Price Difference' 
+                      ? 'Price Delta' 
                       : r.status === 'DATE_MISMATCH' 
-                      ? 'Date Delay' 
+                      ? 'Timing Drift' 
                       : r.status === 'MISSING_INVOICE' 
-                      ? 'Missing Bill' 
+                      ? 'Unbilled Item' 
                       : r.status === 'MULTIPLE_MATCHES'
-                      ? 'Multiple Matches'
+                      ? 'Multi-Match'
                       : r.status;
                     return (
-                      <div key={r.transaction_id} className={`p-4 rounded-xl border transition ${isResolved ? 'bg-[#2F2F2F] border-emerald-500/40' : 'bg-[#212121] border-[#2F2F2F] shadow-sm'}`}>
+                      <div key={r.transaction_id} className={`p-3 rounded-lg border transition-colors ${isResolved ? 'bg-[#121A28] border-emerald-500/30' : 'bg-[#141A27] border-[#1E2638]'}`}>
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-xs text-emerald-400 bg-[#2F2F2F] px-2 py-0.5 rounded">{r.transaction_id}</span>
-                            <span className="text-xs font-bold text-white">{r.vendor || r.invoice_customer || r.payment_merchant || 'Customer'}</span>
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${r.status === 'AMOUNT_MISMATCH' ? 'bg-rose-950 text-rose-300 border border-rose-800/40' : r.status === 'DATE_MISMATCH' ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/40' : r.status === 'MULTIPLE_MATCHES' ? 'bg-amber-950 text-amber-300 border border-amber-800/40' : 'bg-purple-950 text-purple-300 border border-purple-800/40'}`}>
+                            <span className="font-mono font-bold text-xs text-slate-200">{r.transaction_id}</span>
+                            <span className="text-xs font-medium text-white font-sans">{r.vendor || r.invoice_customer || r.payment_merchant || 'Counterparty'}</span>
+                            <span className={`text-[10px] font-mono px-2 py-0.2 rounded border ${r.status === 'AMOUNT_MISMATCH' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : r.status === 'DATE_MISMATCH' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : r.status === 'MULTIPLE_MATCHES' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-purple-500/10 text-purple-400 border-purple-500/30'}`}>
                               {statusLabel}
                             </span>
-                            {isResolved && <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-800/40">✓ FIXED</span>}
+                            {isResolved && <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30">RESOLVED</span>}
                           </div>
                           <div className="text-xs font-mono text-slate-300">
-                            Bank: <strong>₹{(r.amount || 0).toLocaleString()}</strong> | Bill: <strong>₹{(r.invoice_amount || r.amount || 0).toLocaleString()}</strong>
-                            {r.amount_delta ? <span className="text-rose-400 font-bold ml-1.5">(Difference: -₹{Math.abs(r.amount_delta).toLocaleString()})</span> : null}
+                            Bank: <strong>₹{(r.amount || 0).toLocaleString()}</strong> | Invoiced: <strong>₹{(r.invoice_amount || r.amount || 0).toLocaleString()}</strong>
+                            {r.amount_delta ? <span className="text-rose-400 font-medium ml-1.5">(Δ ₹{Math.abs(r.amount_delta).toLocaleString()})</span> : null}
                           </div>
                         </div>
 
-                        <p className="text-xs text-slate-300 bg-[#2F2F2F] p-2.5 rounded-lg border border-[#3A3A3A] mb-3">
-                          <strong className="text-emerald-400">AI Explanation:</strong> {r.explanation || r.reason || 'Variance requires controller review.'}
+                        <p className="text-xs text-slate-300 bg-[#0E131E] p-2 rounded border border-[#1E2638] mb-2.5 font-sans leading-relaxed">
+                          <span className="text-slate-400 font-mono font-semibold">Diagnosis:</span> {r.explanation || r.reason || 'Variance requires controller review.'}
                         </p>
 
                         {!isResolved && (
                           <div className="flex items-center gap-2">
                             {r.status === 'AMOUNT_MISMATCH' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'post_fee_adjustment')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition">
-                                📝 Adjust Processing Fee (GL-6150)
+                              <button onClick={() => handleResolve(r.transaction_id, 'post_fee_adjustment')} className="px-2.5 py-1 bg-[#1E2638] hover:bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/60 rounded text-xs font-mono transition-colors">
+                                Post Fee Adjustment (GL-6150)
                               </button>
                             )}
                             {r.status === 'DATE_MISMATCH' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'accept_date_drift')} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition">
-                                ✅ Approve Date Delay ({Math.abs(r.date_delta_days || 0)} Days)
+                              <button onClick={() => handleResolve(r.transaction_id, 'accept_date_drift')} className="px-2.5 py-1 bg-[#1E2638] hover:bg-blue-950/60 text-blue-400 border border-blue-500/30 hover:border-blue-500/60 rounded text-xs font-mono transition-colors">
+                                Approve Settlement Drift ({Math.abs(r.date_delta_days || 0)}d)
                               </button>
                             )}
                             {r.status === 'MISSING_INVOICE' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'request_bill_ap')} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition">
-                                📨 Request Bill from Seller
+                              <button onClick={() => handleResolve(r.transaction_id, 'request_bill_ap')} className="px-2.5 py-1 bg-[#1E2638] hover:bg-purple-950/60 text-purple-400 border border-purple-500/30 hover:border-purple-500/60 rounded text-xs font-mono transition-colors">
+                                Request AP Invoice from Vendor
                               </button>
                             )}
                             {r.status === 'MULTIPLE_MATCHES' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'confirm_multi_match')} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition">
-                                🔎 Review Shared PO Candidates
+                              <button onClick={() => handleResolve(r.transaction_id, 'confirm_multi_match')} className="px-2.5 py-1 bg-[#1E2638] hover:bg-amber-950/60 text-amber-400 border border-amber-500/30 hover:border-amber-500/60 rounded text-xs font-mono transition-colors">
+                                Review Shared PO Candidates
                               </button>
                             )}
                           </div>
@@ -391,30 +397,34 @@ export function ReconciliationOverviewAndChat({
             )}
           </div>
 
-          {/* Drawer 2: Accounting & Bookkeeping Records */}
-          <div className="bg-[#212121] rounded-xl border border-[#2F2F2F] overflow-hidden shadow-sm">
+          {/* Drawer 2: General Ledger Double-Entry Preview */}
+          <div className="bg-[#0E131E] rounded-lg border border-[#1E2638] overflow-hidden">
             <button 
               onClick={() => setOpenDrawer(openDrawer === 'gl' ? null : 'gl')}
-              className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-[#2F2F2F] transition"
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#141A27] transition-colors"
             >
-              <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-lg bg-[#2F2F2F] text-cyan-400 flex items-center justify-center font-bold text-xs">📑</span>
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                  GL Journal
+                </span>
                 <div>
-                  <h4 className="text-sm font-bold text-white">
-                    Accounting & Bookkeeping Records
+                  <h4 className="text-xs font-bold text-white font-mono uppercase tracking-wide">
+                    General Ledger Journal Entries
                   </h4>
-                  <p className="text-xs text-slate-400">Balanced double-entry adjustments ready to export to Excel / QuickBooks / Tally / Zoho</p>
+                  <p className="text-[11px] text-slate-400 font-sans">Automated balanced double-entry adjustments (ERP / GAAP compliant)</p>
                 </div>
               </div>
-              {openDrawer === 'gl' ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+              {openDrawer === 'gl' ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
             </button>
 
             {openDrawer === 'gl' && (
-              <div className="p-6 border-t border-[#2F2F2F] bg-[#171717] space-y-4">
-                <div className="flex justify-between items-center">
-                  <p className="text-xs text-slate-300">Bookkeeping verified: <strong>Money Added equals Money Deducted (Balanced ₹0.00)</strong>.</p>
-                  <a href="/api/export/gl_entries" className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
-                    <Download className="w-3 h-3" /> Download Accounting Records (CSV)
+              <div className="p-4 border-t border-[#1E2638] bg-[#0E131E] space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+                  <p className="text-slate-300">
+                    Trial Balance Status: <span className="text-emerald-400 font-bold">BALANCED (Debits = Credits, Δ ₹0.00)</span>
+                  </p>
+                  <a href="/api/export/gl_entries" className="px-3 py-1.5 bg-[#141A27] hover:bg-[#1B2335] text-emerald-400 border border-emerald-500/30 rounded text-xs font-mono transition-colors inline-flex items-center gap-1.5 w-fit">
+                    <Download className="w-3.5 h-3.5" /> Download General Ledger (CSV)
                   </a>
                 </div>
               </div>

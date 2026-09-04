@@ -46,144 +46,142 @@ export function ForecastView({ onExport }) {
   return (
     <div className="space-y-5 max-w-[1600px] mx-auto pb-10">
       {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2.5">
-            <img src="/finance_logo.png" alt="Cash Forecast" className="w-8 h-8 rounded-lg object-contain" />
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              Cash Forecast
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
+              30-Day Liquidity & Treasury Forecast
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 font-semibold">
-              30-Day Scenario-Based Forecast
+            <span className="px-2 py-0.2 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              SCENARIO-BASED RUNWAY
             </span>
           </div>
-          <p className="text-xs text-slate-400 font-mono mt-0.5">
-            30-day scenario-based liquidity projection using historical payment patterns and scenario assumptions
+          <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+            Forward liquidity projections modeling customer settlement velocity, recurring payables, and working capital buffers
           </p>
         </div>
 
         {onExport && (
           <button
             onClick={() => onExport('forecast')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-emerald-400 bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-emerald-500/40 shadow-sm transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono text-emerald-400 bg-[#141A27] hover:bg-[#1B2335] border border-emerald-500/30 transition-colors self-start sm:self-auto"
           >
-            <Download className="w-4 h-4" />
-            <span className="font-mono">Export Forecast (CSV)</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Forecast (CSV)</span>
           </button>
         )}
       </div>
 
-      {/* 2. 3 Scenario Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* 2. Scenario Metric Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {/* Conservative */}
-        <div className="figma-card p-4 flex flex-col justify-between bg-[#171717] border border-[#2F2F2F] card-interactive">
+        <div className="figma-card p-4 flex flex-col justify-between bg-[#111622] border border-[#1E2638] card-interactive">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-semibold uppercase text-slate-400">
-              LOWEST ESTIMATE (DAY 30)
+            <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400">
+              CONSERVATIVE MODEL (DAY 30)
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#2F2F2F] text-rose-400 border border-rose-500/30">
-              Conservative
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+              Stress-Tested
             </span>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold font-mono text-rose-400">
+          <div className="mt-2.5">
+            <div className="text-xl font-bold font-mono text-rose-400">
               {formatLakh(conservativeEnding)}
             </div>
-            <div className="text-xs text-slate-400 font-mono mt-0.5">
-              Assumes 5-day customer payment delay
+            <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Assumes 5-day customer payment settlement lag
             </div>
-            <div className="mt-2 text-xs font-mono text-slate-400 flex items-center gap-1">
+            <div className="mt-2 text-[11px] font-mono text-slate-400 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Safe cash reserve maintained</span>
+              <span>Capital buffer preserved</span>
             </div>
           </div>
         </div>
 
         {/* Base */}
-        <div className="figma-card p-4 flex flex-col justify-between bg-[#171717] border border-cyan-500/40 card-interactive">
+        <div className="figma-card p-4 flex flex-col justify-between bg-[#111622] border border-blue-500/30 card-interactive">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-semibold uppercase text-slate-400">
-              EXPECTED PLAN (DAY 30)
+            <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400">
+              BASE CASE MODEL (DAY 30)
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#2F2F2F] text-cyan-400 border border-cyan-500/30">
-              Expected
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              Expected Velocity
             </span>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold font-mono text-cyan-300">
+          <div className="mt-2.5">
+            <div className="text-xl font-bold font-mono text-blue-300">
               {formatLakh(baseEnding)}
             </div>
-            <div className="text-xs text-slate-400 font-mono mt-0.5">
-              Based on standard payment velocity
+            <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Standard operational collection and disbursement cycles
             </div>
-            <div className="mt-2 text-xs font-mono text-emerald-400 flex items-center gap-1">
+            <div className="mt-2 text-[11px] font-mono text-emerald-400 flex items-center gap-1">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>{projectedGain >= 0 ? `+${formatLakh(projectedGain)}` : formatLakh(projectedGain)} projected net change</span>
+              <span>{projectedGain >= 0 ? `+${formatLakh(projectedGain)}` : formatLakh(projectedGain)} net 30D change</span>
             </div>
           </div>
         </div>
 
         {/* Optimistic */}
-        <div className="figma-card p-4 flex flex-col justify-between bg-[#171717] border border-[#2F2F2F] card-interactive">
+        <div className="figma-card p-4 flex flex-col justify-between bg-[#111622] border border-[#1E2638] card-interactive">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono font-semibold uppercase text-slate-400">
-              BEST-CASE ESTIMATE
+            <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400">
+              ACCELERATED MODEL (DAY 30)
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30">
-              Fast Payments
+            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Accelerated
             </span>
           </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold font-mono text-emerald-400">
+          <div className="mt-2.5">
+            <div className="text-xl font-bold font-mono text-emerald-400">
               {formatLakh(optimisticEnding)}
             </div>
-            <div className="text-xs text-slate-400 font-mono mt-0.5">
-              Assumes immediate customer settlements
+            <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Assumes early invoice settlements and prompt collections
             </div>
-            <div className="mt-2 text-xs font-mono text-emerald-400 flex items-center gap-1">
+            <div className="mt-2 text-[11px] font-mono text-emerald-400 flex items-center gap-1">
               <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>Accelerated inflow model</span>
+              <span>Inflow acceleration profile</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 3. 30-Day Daily Simulation Table */}
-      <div className="figma-card overflow-hidden shadow-xl bg-[#171717] border border-[#2F2F2F]">
-        <div className="p-4 border-b border-[#2F2F2F] bg-[#171717] flex items-center justify-between">
+      <div className="figma-card overflow-hidden shadow-sm bg-[#111622] border border-[#1E2638]">
+        <div className="p-3.5 border-b border-[#1E2638] bg-[#111622] flex items-center justify-between">
           <div className="flex items-center gap-2 font-mono text-xs text-slate-300">
-            <Calendar className="w-4 h-4 text-emerald-400" />
-            <span className="font-bold text-white">30-Day Daily Cash Estimate</span>
+            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="font-bold text-white uppercase text-[11px]">30-Day Daily Liquidity Schedule</span>
           </div>
-          <span className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5" />
-            Smart Speed Adjustment
+          <span className="text-[10px] font-mono text-slate-400">
+            Automated Cash Flow Simulation
           </span>
         </div>
 
-        <div className="overflow-x-auto bg-[#171717]">
+        <div className="overflow-x-auto bg-[#0E131E]">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#171717] border-b border-[#2F2F2F] text-[11px] font-mono uppercase tracking-wider text-slate-400">
+            <thead className="bg-[#0E131E] border-b border-[#1E2638] text-[10px] font-mono uppercase tracking-wider text-slate-400">
               <tr>
-                <th className="py-3 px-4 font-semibold">DAY / DATE</th>
-                <th className="py-3 px-4 font-semibold text-right">MONEY IN (₹)</th>
-                <th className="py-3 px-4 font-semibold text-right">MONEY OUT (₹)</th>
-                <th className="py-3 px-4 font-semibold text-right">DAILY NET (₹)</th>
-                <th className="py-3 px-4 font-semibold text-right">ENDING BALANCE (₹)</th>
-                <th className="py-3 px-4 font-semibold text-center">CONFIDENCE</th>
+                <th className="py-2.5 px-3.5 font-semibold">DAY / SCHEDULE</th>
+                <th className="py-2.5 px-3.5 font-semibold text-right">INFLOW (₹)</th>
+                <th className="py-2.5 px-3.5 font-semibold text-right">OUTFLOW (₹)</th>
+                <th className="py-2.5 px-3.5 font-semibold text-right">NET DAILY FLOW (₹)</th>
+                <th className="py-2.5 px-3.5 font-semibold text-right">CLOSING CASH BALANCE (₹)</th>
+                <th className="py-2.5 px-3.5 font-semibold text-center">CONFIDENCE</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2F2F2F] text-xs font-mono">
+            <tbody className="divide-y divide-[#1E2638] text-xs font-mono">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-400">
-                    Calculating 30-day cash estimates...
+                  <td colSpan="6" className="py-10 text-center text-slate-400 font-mono text-xs">
+                    Calculating 30-day liquidity projection...
                   </td>
                 </tr>
               ) : forecast.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-400">
-                    No forecast records found.
+                  <td colSpan="6" className="py-10 text-center text-slate-400 font-mono text-xs">
+                    No forecast records available.
                   </td>
                 </tr>
               ) : (
@@ -197,38 +195,38 @@ export function ForecastView({ onExport }) {
                   const confidence = row.confidence ?? row['Confidence (%)'] ?? 95;
 
                   return (
-                    <tr key={idx} className="hover:bg-[#3A3A3A]/40 transition-colors">
+                    <tr key={idx} className="hover:bg-[#141A27] transition-colors">
                       {/* Day & Date */}
-                      <td className="py-3 px-4 font-bold text-white">
+                      <td className="py-2.5 px-3.5 font-medium text-white">
                         <span className="text-emerald-400 mr-2">Day {row.day ?? row.Day ?? idx + 1}</span>
                         <span className="text-slate-400 font-normal">{row.date || row.Date || `2026-09-${String(idx + 1).padStart(2, '0')}`}</span>
                       </td>
 
                       {/* Inflow */}
-                      <td className="py-3 px-4 text-right text-emerald-400 font-bold">
+                      <td className="py-2.5 px-3.5 text-right text-emerald-400 font-semibold">
                         ₹{inflow.toLocaleString('en-IN')}
                       </td>
 
                       {/* Outflow */}
-                      <td className="py-3 px-4 text-right text-rose-400 font-bold">
+                      <td className="py-2.5 px-3.5 text-right text-rose-400 font-semibold">
                         ₹{outflow.toLocaleString('en-IN')}
                       </td>
 
                       {/* Net */}
-                      <td className="py-3 px-4 text-right">
-                        <span className={net >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      <td className="py-2.5 px-3.5 text-right font-semibold">
+                        <span className={net >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
                           {net >= 0 ? `+₹${net.toLocaleString('en-IN')}` : `-₹${Math.abs(net).toLocaleString('en-IN')}`}
                         </span>
                       </td>
 
                       {/* Closing Balance */}
-                      <td className="py-3 px-4 text-right font-bold text-white">
+                      <td className="py-2.5 px-3.5 text-right font-bold text-white">
                         ₹{balance.toLocaleString('en-IN')}
                       </td>
 
                       {/* Confidence */}
-                      <td className="py-3 px-4 text-center">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30">
+                      <td className="py-2.5 px-3.5 text-center">
+                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                           {confidence}% High
                         </span>
                       </td>

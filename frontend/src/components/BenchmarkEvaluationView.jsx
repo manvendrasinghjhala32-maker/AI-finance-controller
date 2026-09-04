@@ -157,42 +157,44 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
   // --------------------------------------------------------------------------
   if (!metrics) {
     return (
-      <div className="space-y-6 max-w-[1200px] mx-auto pb-12 animate-fade-in">
+      <div className="space-y-5 max-w-[1200px] mx-auto pb-10">
         {renderFileInput()}
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2.5">
-              <img src="/finance_logo.png" alt="Benchmark" className="w-8 h-8 rounded-lg object-contain" />
-              <h1 className="text-2xl font-bold text-white tracking-tight">
-                Ground-Truth Benchmark & Accuracy
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
+                Model Benchmark & Verification
               </h1>
+              <span className="px-2 py-0.2 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-[#1E2638]">
+                EMPIRICAL VALIDATION
+              </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono mt-1">
-              Empirically measures precision, recall, and category classification accuracy against verified benchmark keys.
+            <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Empirical audit testing precision, recall, and category classification accuracy against verified ground truth keys
             </p>
           </div>
         </div>
 
         {/* Empty State Banner */}
-        <div className="bg-[#171717] border-2 border-dashed border-[#3A3A3A] hover:border-emerald-500/50 rounded-2xl p-10 sm:p-14 text-center space-y-6 shadow-xl transition-all">
-          <div className="w-16 h-16 rounded-2xl bg-[#212121] border border-[#2F2F2F] flex items-center justify-center p-2.5 mx-auto shadow-inner">
-            <img src="/finance_logo.png" alt="Benchmark" className="w-12 h-12 object-contain" />
+        <div className="bg-[#111622] border border-[#1E2638] rounded-xl p-8 sm:p-12 text-center space-y-4 shadow-sm">
+          <div className="w-12 h-12 rounded-lg bg-[#141A27] border border-[#1E2638] flex items-center justify-center mx-auto text-emerald-400">
+            <ShieldCheck className="w-6 h-6" />
           </div>
 
-          <div className="space-y-2.5 max-w-lg mx-auto">
-            <h2 className="text-xl font-bold text-white tracking-tight">
-              Please upload a ground truth file to test
+          <div className="space-y-1.5 max-w-lg mx-auto">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wide font-mono">
+              Validation Key Required
             </h2>
             <p className="text-xs text-slate-400 font-sans leading-relaxed">
-              To measure the empirical accuracy, invoice linking precision, and per-category verification rates of the reconciliation engine, please upload a <code className="text-emerald-400 font-mono bg-[#212121] px-1.5 py-0.5 rounded border border-[#2F2F2F]">ground_truth.csv</code> file.
+              Upload a verified ground truth benchmark dataset (<code className="text-emerald-400 font-mono bg-[#141A27] px-1.5 py-0.5 rounded border border-[#1E2638]">ground_truth.csv</code>) to perform statistical accuracy scoring.
             </p>
           </div>
 
           {uploadError && (
-            <div className="p-3 bg-rose-950/40 border border-rose-800/50 rounded-xl text-rose-300 text-xs font-mono max-w-md mx-auto">
-              ⚠️ {uploadError}
+            <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded text-rose-400 text-xs font-mono max-w-md mx-auto">
+              {uploadError}
             </div>
           )}
 
@@ -200,15 +202,15 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/40 transition-all cursor-pointer btn-interactive font-mono disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded bg-[#141A27] hover:bg-[#1B2335] text-emerald-400 border border-emerald-500/30 font-mono text-xs transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Upload className="w-4 h-4" />
-              <span>{uploading ? 'Processing Benchmark Key...' : 'Upload Ground Truth CSV (.csv)'}</span>
+              <Upload className="w-3.5 h-3.5" />
+              <span>{uploading ? 'Processing Benchmark Key...' : 'Upload Ground Truth Key (.csv)'}</span>
             </button>
           </div>
 
-          <div className="text-[11px] text-slate-500 font-mono">
-            Expected columns: <code className="text-slate-400">transaction_id</code>, <code className="text-slate-400">expected_status</code>, <code className="text-slate-400">expected_invoice_id</code>
+          <div className="text-[10px] text-slate-500 font-mono">
+            Expected schema: <code className="text-slate-400">transaction_id</code>, <code className="text-slate-400">expected_status</code>, <code className="text-slate-400">expected_invoice_id</code>
           </div>
         </div>
       </div>
@@ -216,89 +218,71 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
   }
 
   // --------------------------------------------------------------------------
-  // Case 2: Ground Truth Uploaded but Does NOT Match Dataset (Failure Explanation)
+  // Case 2: Ground Truth Uploaded but Does NOT Match Dataset
   // --------------------------------------------------------------------------
   if (metrics.matches_dataset === false) {
     return (
-      <div className="space-y-6 max-w-[1200px] mx-auto pb-12 animate-fade-in">
+      <div className="space-y-5 max-w-[1200px] mx-auto pb-10">
         {renderFileInput()}
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2.5">
-              <img src="/finance_logo.png" alt="Benchmark" className="w-8 h-8 rounded-lg object-contain" />
-              <h1 className="text-2xl font-bold text-white tracking-tight">
-                Ground-Truth Benchmark & Accuracy
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
+                Model Benchmark & Verification
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-rose-950/50 text-rose-400 border border-rose-800/40 font-semibold">
-                Dataset Mismatch
+              <span className="px-2 py-0.2 rounded text-[10px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                KEY MISMATCH
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono mt-1">
-              Empirically measures precision, recall, and category classification accuracy against verified benchmark keys.
+            <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+              Empirical audit testing precision, recall, and category classification accuracy against verified ground truth keys
             </p>
           </div>
         </div>
 
-        {/* Detailed Mismatch & Failure Explanation Card */}
-        <div className="bg-[#171717] border-2 border-rose-500/50 rounded-2xl p-8 sm:p-10 space-y-6 shadow-2xl transition-all">
-          <div className="text-center space-y-3">
-            <div className="w-16 h-16 rounded-2xl bg-rose-950/60 border border-rose-500/40 flex items-center justify-center text-3xl mx-auto shadow-inner text-rose-400 animate-pulse">
-              ⚠️
-            </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              The ground truth doesn't match
+        {/* Detailed Mismatch Card */}
+        <div className="bg-[#111622] border border-rose-500/30 rounded-xl p-6 sm:p-8 space-y-4 shadow-sm">
+          <div className="text-center space-y-2">
+            <h2 className="text-base font-bold text-white font-mono uppercase tracking-wide">
+              Benchmark Dataset Incompatible
             </h2>
             <p className="text-xs text-slate-300 max-w-xl mx-auto font-sans leading-relaxed">
-              The benchmark evaluation could not execute because the uploaded ground truth file is incompatible with the currently loaded bank statement dataset.
+              The benchmark evaluation could not execute because the uploaded validation key does not correlate with the currently active banking statement dataset.
             </p>
           </div>
 
-          {/* Failure Root-Cause Diagnosis Box */}
-          <div className="bg-[#212121] border border-rose-900/40 rounded-xl p-5 space-y-4 max-w-2xl mx-auto">
-            <div className="text-xs font-bold font-mono text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Benchmark Failure Explanation & Diagnostics:</span>
+          {/* Failure Root-Cause Box */}
+          <div className="bg-[#0E131E] border border-[#1E2638] rounded-lg p-4 space-y-2.5 max-w-2xl mx-auto text-xs font-mono">
+            <div className="flex items-start gap-2">
+              <span className="text-rose-400 min-w-[120px] font-semibold">Diagnosis:</span>
+              <span className="text-slate-300 font-sans">{metrics.error || "Zero matching transaction IDs detected between validation key and bank ledger."}</span>
             </div>
-
-            <div className="space-y-2.5 text-xs font-sans">
-              <div className="flex items-start gap-2 bg-[#171717] p-3 rounded-lg border border-[#2F2F2F]">
-                <span className="font-bold text-rose-300 min-w-[130px] font-mono">Failure Reason:</span>
-                <span className="text-slate-300">{metrics.error || "Zero matching transaction IDs detected between ground truth and bank dataset."}</span>
-              </div>
-
-              <div className="flex items-start gap-2 bg-[#171717] p-3 rounded-lg border border-[#2F2F2F]">
-                <span className="font-bold text-cyan-300 min-w-[130px] font-mono">Overlap Evidence:</span>
-                <span className="text-slate-300 font-mono">Found {metrics.overlap_count ?? 0} matching transaction IDs out of {metrics.total_dataset_records ?? records.length} total dataset records.</span>
-              </div>
-
-              <div className="flex items-start gap-2 bg-[#171717] p-3 rounded-lg border border-[#2F2F2F]">
-                <span className="font-bold text-amber-300 min-w-[130px] font-mono">Expected Schema:</span>
-                <span className="text-slate-300 font-mono">File must contain <code className="text-amber-300">transaction_id</code>, <code className="text-amber-300">expected_status</code>, and optionally <code className="text-amber-300">expected_invoice_id</code>.</span>
-              </div>
-
-              <div className="flex items-start gap-2 bg-[#171717] p-3 rounded-lg border border-[#2F2F2F]">
-                <span className="font-bold text-emerald-300 min-w-[130px] font-mono">Recommended Fix:</span>
-                <span className="text-slate-300">Upload the corresponding <code className="text-emerald-300 font-mono">ground_truth.csv</code> created for this specific bank statement dataset.</span>
-              </div>
+            <div className="flex items-start gap-2">
+              <span className="text-blue-400 min-w-[120px] font-semibold">Key Overlap:</span>
+              <span className="text-slate-300">Found {metrics.overlap_count ?? 0} matching transaction IDs out of {metrics.total_dataset_records ?? records.length} total dataset records.</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-emerald-400 min-w-[120px] font-semibold">Action:</span>
+              <span className="text-slate-300 font-sans">Upload the corresponding ground truth key matched to this ledger cohort.</span>
             </div>
           </div>
 
           {uploadError && (
-            <div className="p-3 bg-rose-950/40 border border-rose-800/50 rounded-xl text-rose-300 text-xs font-mono max-w-md mx-auto text-center">
-              ⚠️ {uploadError}
+            <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded text-rose-400 text-xs font-mono max-w-md mx-auto text-center">
+              {uploadError}
             </div>
           )}
 
-          <div className="text-center pt-2">
+          <div className="text-center pt-1">
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/40 transition-all cursor-pointer btn-interactive font-mono disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded bg-[#141A27] hover:bg-[#1B2335] text-emerald-400 border border-emerald-500/30 text-xs font-mono transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Upload className="w-4 h-4" />
-              <span>{uploading ? 'Processing Benchmark Key...' : 'Upload Correct Ground Truth CSV (.csv)'}</span>
+              <Upload className="w-3.5 h-3.5" />
+              <span>{uploading ? 'Processing Validation Key...' : 'Upload Matched Benchmark Key (.csv)'}</span>
             </button>
           </div>
         </div>
@@ -310,37 +294,31 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
   // Case 3: Ground Truth Uploaded & Verified -> Full Empirical Evaluation Suite
   // --------------------------------------------------------------------------
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto pb-12 animate-fade-in">
+    <div className="space-y-5 max-w-[1600px] mx-auto pb-10">
       {renderFileInput()}
 
       {/* 1. Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2.5">
-            <img src="/finance_logo.png" alt="Benchmark" className="w-8 h-8 rounded-lg object-contain" />
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              Ground-Truth Benchmark & Accuracy
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
+              Model Benchmark & Verification
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30 font-semibold">
-              Empirical Verification
+            <span className="px-2 py-0.2 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              VERIFIED KEY LOADED
             </span>
           </div>
-          <p className="text-xs text-slate-400 font-mono mt-1">
-            Measures empirical reconciliation accuracy, invoice ID resolution, and category precision against verified ground truth.
+          <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+            Empirical audit testing precision, recall, and category classification accuracy against verified ground truth keys
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#16251E] text-emerald-400 border border-emerald-500/40 shadow-sm">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Verified Ground Truth Key Loaded</span>
-          </span>
-
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-[#2F2F2F] hover:bg-[#3A3A3A] text-slate-200 border border-[#3A3A3A] shadow-sm transition-all cursor-pointer btn-interactive"
-            title="Replace or upload another ground truth CSV"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono text-slate-300 bg-[#141A27] hover:bg-[#1B2335] hover:text-white border border-[#1E2638] transition-colors cursor-pointer"
+            title="Replace benchmark key"
           >
             <Upload className="w-3.5 h-3.5 text-emerald-400" />
             <span>Replace Key</span>
@@ -349,17 +327,17 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
       </div>
 
       {uploadError && (
-        <div className="p-3 bg-rose-950/40 border border-rose-800/50 rounded-xl text-rose-300 text-xs font-mono">
-          ⚠️ {uploadError}
+        <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded text-rose-400 text-xs font-mono">
+          {uploadError}
         </div>
       )}
 
       {/* Ingestion Warning Banner if any */}
       {ingestionWarnings.length > 0 && (
-        <div className="p-4 bg-amber-950/40 border border-amber-500/50 rounded-xl space-y-1.5 text-amber-200 text-xs font-mono">
-          <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-amber-300">
-            <AlertTriangle className="w-4 h-4" />
-            <span>Ingestion Warning</span>
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-1 text-amber-200 text-xs font-mono">
+          <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-amber-300">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>Ingestion Warnings</span>
           </div>
           {ingestionWarnings.map((w, idx) => (
             <p key={idx}>{w}</p>
@@ -368,235 +346,103 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
       )}
 
       {/* 2. Top Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* Measured Accuracy */}
-        <div className="figma-card p-5 bg-[#171717] border border-emerald-500/40 rounded-xl shadow-xl card-interactive">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-              Measured Accuracy
-            </span>
-            <span className="w-6 h-6 rounded-lg bg-emerald-950/60 border border-emerald-500/40 flex items-center justify-center text-xs text-emerald-400">
-              🎯
-            </span>
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            MODEL PRECISION
+          </span>
+          <div className="text-xl font-bold font-mono text-emerald-400 mt-1.5">
+            {classificationAccuracy.toFixed(1)}%
           </div>
-          <div className="mt-3">
-            <div className="text-3xl font-black font-mono text-emerald-400">
-              {classificationAccuracy.toFixed(1)}%
-            </div>
-            <div className="text-xs text-slate-400 font-mono mt-1">
-              {classificationCorrect} of {totalAudited} classifications correct
-            </div>
+          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+            {classificationCorrect} of {totalAudited} correct
           </div>
         </div>
 
         {/* Invoice Linking Rate */}
-        <div className="figma-card p-5 bg-[#171717] border border-cyan-500/30 rounded-xl shadow-xl card-interactive">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-              Invoice Linking Rate
-            </span>
-            <span className="w-6 h-6 rounded-lg bg-cyan-950/60 border border-cyan-500/40 flex items-center justify-center text-xs text-cyan-400">
-              🔗
-            </span>
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            INVOICE MATCH RATE
+          </span>
+          <div className="text-xl font-bold font-mono text-blue-300 mt-1.5">
+            {invoiceAccuracy.toFixed(1)}%
           </div>
-          <div className="mt-3">
-            <div className="text-3xl font-black font-mono text-cyan-300">
-              {invoiceAccuracy.toFixed(1)}%
-            </div>
-            <div className="text-xs text-slate-400 font-mono mt-1">
-              {invoiceCorrectCount} of {totalAudited} invoice IDs linked
-            </div>
+          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+            {invoiceCorrectCount} of {totalAudited} IDs linked
           </div>
         </div>
 
         {/* Verification Failures */}
-        <div className={`figma-card p-5 bg-[#171717] border ${classificationFailures === 0 ? 'border-emerald-500/30' : 'border-rose-500/50'} rounded-xl shadow-xl card-interactive`}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-              Verification Failures
-            </span>
-            <span className={`w-6 h-6 rounded-lg ${classificationFailures === 0 ? 'bg-emerald-950/60 text-emerald-400 border-emerald-500/40' : 'bg-rose-950/60 text-rose-400 border-rose-500/40'} border flex items-center justify-center text-xs`}>
-              {classificationFailures === 0 ? '✓' : '⚠️'}
-            </span>
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            VALIDATION DELTAS
+          </span>
+          <div className={`text-xl font-bold font-mono mt-1.5 ${classificationFailures === 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {classificationFailures}
           </div>
-          <div className="mt-3">
-            <div className={`text-3xl font-black font-mono ${classificationFailures === 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {classificationFailures}
-            </div>
-            <div className="text-xs text-slate-400 font-mono mt-1">
-              {classificationFailures === 0 ? '0 verification failures' : `${classificationFailures} verification failures`}
-            </div>
+          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+            {classificationFailures === 0 ? 'Zero discrepancies' : `${classificationFailures} benchmark variations`}
           </div>
         </div>
 
         {/* Evaluated Categories */}
-        <div className="figma-card p-5 bg-[#171717] border border-amber-500/30 rounded-xl shadow-xl card-interactive">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-              Evaluated Categories
-            </span>
-            <span className="w-6 h-6 rounded-lg bg-amber-950/60 border border-amber-500/40 flex items-center justify-center text-xs text-amber-400">
-              📑
-            </span>
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            EVALUATED CLASSES
+          </span>
+          <div className="text-xl font-bold font-mono text-white mt-1.5">
+            {Object.keys(metrics?.categories || {}).length || 4}
           </div>
-          <div className="mt-3">
-            <div className="text-3xl font-black font-mono text-amber-300">
-              {Object.keys(metrics?.categories || {}).length || 4}
-            </div>
-            <div className="text-xs text-slate-400 font-mono mt-1">
-              {Object.keys(metrics?.categories || {}).length || 4} test categories scored
-            </div>
+          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+            Distinct transaction types
           </div>
         </div>
 
-        {/* Throughput */}
-        <div className="figma-card p-5 bg-[#171717] border border-purple-500/30 rounded-xl shadow-xl card-interactive">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-              Throughput Speed
-            </span>
-            <span className="w-6 h-6 rounded-lg bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-xs text-purple-400">
-              ⚡
-            </span>
+        {/* Reconciliation Engine Throughput */}
+        <div className="figma-card p-4 bg-[#111622] border border-[#1E2638] card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            PROCESSING LATENCY
+          </span>
+          <div className="text-xl font-bold font-mono text-slate-200 mt-1.5">
+            {Math.round(metrics?.records_per_second || currentData?.summary?.records_per_second || (totalAudited > 0 ? totalAudited / 0.18 : 900)).toLocaleString()} <span className="text-xs font-normal text-slate-400">rec/s</span>
           </div>
-          <div className="mt-3">
-            <div className="text-3xl font-black font-mono text-purple-300">
-              {Math.round(metrics?.records_per_second || currentData?.summary?.records_per_second || (totalAudited > 0 ? totalAudited / 0.18 : 900)).toLocaleString()} <span className="text-lg font-normal text-purple-400">/s</span>
-            </div>
-            <div className="text-xs text-slate-400 font-mono mt-1">
-              {(metrics?.elapsed_seconds ?? currentData?.summary?.elapsed_seconds ?? 0.18).toFixed(3)}s processing speed
-            </div>
+          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+            {(metrics?.elapsed_seconds ?? currentData?.summary?.elapsed_seconds ?? 0.18).toFixed(3)}s engine speed
           </div>
         </div>
       </div>
 
-      {/* Systemic Ingestion / Mapping Issue Consolidated Banner */}
-      {systemicIssues.length > 0 && (
-        <div className="space-y-3">
-          {systemicIssues.map((sys, idx) => (
-            <div key={idx} className="bg-amber-950/40 border-2 border-amber-500/50 rounded-2xl p-5 space-y-3 shadow-xl">
-              <div className="flex items-center gap-2 text-amber-300 font-bold text-sm font-mono uppercase tracking-wider">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-                <span>{sys.title} ({sys.affected_count} records affected)</span>
-              </div>
-              <p className="text-xs text-slate-200 font-sans leading-relaxed">
-                {sys.description}
-              </p>
-              <div className="p-3 bg-[#171717] border border-amber-800/40 rounded-xl text-xs text-amber-200 font-mono">
-                💡 <strong>Systemic Root-Cause Fix:</strong> {sys.suggested_fix}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 3. Dedicated Failure Explanation Section */}
-      {incorrectPredictions.length > 0 && (
-        <div className="bg-[#171717] border-2 border-rose-500/50 rounded-2xl p-6 shadow-2xl space-y-4 animate-scale-in">
-          <div className="flex items-center justify-between border-b border-[#2F2F2F] pb-3">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-rose-400" />
-              <h2 className="text-base font-bold text-white tracking-tight">
-                Benchmark Discrepancy Explanations & Engine Diagnostics ({incorrectPredictions.length})
-              </h2>
-            </div>
-            <span className="text-xs font-mono text-rose-300 bg-rose-950/60 px-2.5 py-1 rounded-lg border border-rose-800/50">
-              Action Required to Achieve 100%
-            </span>
-          </div>
-
-          <p className="text-xs text-slate-300 font-sans leading-relaxed">
-            The following discrepancies occurred where the reconciliation engine's output differed from the verified ground truth key. Explanations reflect the actual decision reasons reported by the matching engine:
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            {incorrectPredictions.map((inc, idx) => (
-              <div 
-                key={inc.transaction_id || idx}
-                className="bg-[#212121] border border-rose-900/40 rounded-xl p-4 space-y-3 shadow-md"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-[#2F2F2F] pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-xs text-emerald-400 bg-[#171717] px-2 py-0.5 rounded border border-[#2F2F2F]">
-                      {inc.transaction_id}
-                    </span>
-                    <span className="text-xs font-bold text-white truncate max-w-[160px]">
-                      {inc.vendor || 'Counterparty'}
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800/50 font-semibold">
-                    {inc.failure_type || 'Discrepancy'}
-                  </span>
-                </div>
-
-                {/* Comparison Grid */}
-                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div className="p-2 bg-[#171717] rounded-lg border border-[#2F2F2F] space-y-1">
-                    <span className="text-[10px] text-slate-400 block uppercase">Engine Predicted:</span>
-                    <span className="font-bold text-rose-300 block">{inc.status}</span>
-                    <span className="text-[11px] text-slate-400 block truncate">Inv: {inc.invoice_id || 'None'}</span>
-                  </div>
-                  <div className="p-2 bg-[#171717] rounded-lg border border-[#2F2F2F] space-y-1">
-                    <span className="text-[10px] text-slate-400 block uppercase">Ground Truth:</span>
-                    <span className="font-bold text-emerald-400 block">{inc.expected_status}</span>
-                    <span className="text-[11px] text-slate-400 block truncate">Inv: {inc.expected_invoice_id || 'None'}</span>
-                  </div>
-                </div>
-
-                {/* Explanation */}
-                <div className="space-y-1">
-                  <span className="text-[11px] font-bold text-slate-300 font-mono flex items-center gap-1">
-                    <Info className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Engine Decision Reason:</span>
-                  </span>
-                  <p className="text-xs text-slate-300 font-sans leading-relaxed">
-                    {inc.explanation || inc.engine_reason || "Reconciler output differs from the benchmark key."}
-                  </p>
-                </div>
-
-                {/* Actionable Advice */}
-                {inc.suggested_fix && (
-                  <div className="p-2.5 bg-emerald-950/30 border border-emerald-800/40 rounded-lg text-xs text-emerald-300 font-sans">
-                    💡 <strong>Suggested Fix:</strong> {inc.suggested_fix}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 4. Category Breakdown Grid */}
+      {/* 3. Category Breakdown Grid */}
       {metrics?.categories && (
-        <div className="bg-[#171717] border border-[#2F2F2F] rounded-xl p-5 shadow-xl space-y-3">
-          <div className="flex items-center justify-between border-b border-[#2F2F2F] pb-3">
+        <div className="bg-[#111622] border border-[#1E2638] rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between border-b border-[#1E2638] pb-2.5">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">
-              Per-Category Verification Breakdown
+              Per-Class Empirical Verification Breakdown
             </span>
-            <span className="text-xs text-emerald-400 font-mono font-semibold">
-              100% Pass Threshold Target
+            <span className="text-xs text-emerald-400 font-mono">
+              100% Target Threshold
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 pt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 pt-1">
             {Object.entries(metrics.categories).map(([cat, m]) => {
-              const label = cat === 'MATCH' ? 'Clean Matches' : cat === 'AMOUNT_MISMATCH' ? 'Price Differences' : cat === 'DATE_MISMATCH' ? 'Date Delays' : cat === 'MISSING_INVOICE' ? 'Missing Bills' : cat === 'MULTIPLE_MATCHES' ? 'Multiple Matches' : cat;
+              const label = cat === 'MATCH' ? 'Reconciled Matches' : cat === 'AMOUNT_MISMATCH' ? 'Price Variances' : cat === 'DATE_MISMATCH' ? 'Timing Drift' : cat === 'MISSING_INVOICE' ? 'Unbilled Items' : cat === 'MULTIPLE_MATCHES' ? 'Multi-Match' : cat;
               const isPerfect = m.accuracy >= 100;
               return (
-                <div key={cat} className="bg-[#212121] border border-[#2F2F2F] rounded-xl p-3.5 flex flex-col justify-between card-interactive">
-                  <span className="text-[11px] font-bold text-slate-300 font-mono truncate" title={label}>
+                <div key={cat} className="bg-[#0E131E] border border-[#1E2638] rounded-lg p-3 flex flex-col justify-between card-interactive">
+                  <span className="text-[11px] font-semibold text-slate-300 font-mono truncate" title={label}>
                     {label}
                   </span>
-                  <div className="my-2">
-                    <div className={`text-2xl font-black font-mono ${isPerfect ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <div className="my-1.5">
+                    <div className={`text-lg font-bold font-mono ${isPerfect ? 'text-emerald-400' : 'text-amber-400'}`}>
                       {m.accuracy.toFixed(0)}%
                     </div>
-                    <div className="text-[11px] text-slate-400 font-mono">
+                    <div className="text-[10px] text-slate-400 font-mono">
                       {m.correct} of {m.total} verified
                     </div>
                   </div>
-                  <div className="w-full bg-[#2F2F2F] rounded-full h-1.5 overflow-hidden">
+                  <div className="w-full bg-[#141A27] rounded-full h-1 overflow-hidden">
                     <div className={`h-full rounded-full ${isPerfect ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{ width: `${m.accuracy}%` }} />
                   </div>
                 </div>
@@ -606,28 +452,28 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
         </div>
       )}
 
-      {/* 5. Record-by-Record Audit Table */}
-      <div className="bg-[#171717] border border-[#2F2F2F] rounded-xl overflow-hidden shadow-xl">
+      {/* 4. Record-by-Record Audit Table */}
+      <div className="bg-[#111622] border border-[#1E2638] rounded-xl overflow-hidden shadow-sm">
         {/* Table Toolbar */}
-        <div className="p-4 border-b border-[#2F2F2F] bg-[#171717] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="p-3.5 border-b border-[#1E2638] bg-[#111622] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-white font-mono">
-              Audit Ledger Records ({filteredAuditRecords.length})
+              Validation Ledger Audit ({filteredAuditRecords.length})
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Filter Pills */}
-            <div className="flex items-center gap-1.5 bg-[#212121] p-1 rounded-lg border border-[#2F2F2F] text-xs font-mono">
+            <div className="flex items-center gap-1 text-xs font-mono">
               {[
                 { id: 'ALL', label: `All (${auditRecords.length})` },
                 { id: 'CORRECT', label: `Passed (${totalCorrect})` },
-                ...(errorCount > 0 ? [{ id: 'INCORRECT', label: `Failed Discrepancies (${errorCount})` }] : [])
+                ...(errorCount > 0 ? [{ id: 'INCORRECT', label: `Deltas (${errorCount})` }] : [])
               ].map(f => (
                 <button
                   key={f.id}
                   onClick={() => setFilterMode(f.id)}
-                  className={`px-3 py-1 rounded-md transition font-semibold ${filterMode === f.id ? 'bg-[#2F2F2F] text-emerald-400 shadow-sm border border-emerald-500/30' : 'text-slate-400 hover:text-white'}`}
+                  className={`px-2.5 py-1 rounded transition-colors text-xs ${filterMode === f.id ? 'bg-[#182030] text-emerald-400 border border-emerald-500/30 font-semibold' : 'bg-[#141A27] text-slate-400 border border-[#1E2638] hover:bg-[#182030] hover:text-slate-200'}`}
                 >
                   {f.label}
                 </button>
@@ -635,38 +481,38 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
             </div>
 
             {/* Search Box */}
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <div className="relative w-full sm:w-56">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search Tx ID, vendor, invoice..."
+                placeholder="Filter ID, vendor, invoice..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#212121] border border-[#2F2F2F] rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
+                className="w-full pl-8 pr-2.5 py-1 text-xs bg-[#141A27] border border-[#1E2638] rounded text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono"
               />
             </div>
           </div>
         </div>
 
         {/* Table Body */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto bg-[#0E131E]">
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#212121] border-b border-[#2F2F2F] text-[11px] font-mono uppercase tracking-wider text-slate-400">
+            <thead className="bg-[#0E131E] border-b border-[#1E2638] text-[10px] font-mono uppercase tracking-wider text-slate-400">
               <tr>
-                <th className="py-3 px-4 font-semibold">TRANSACTION ID</th>
-                <th className="py-3 px-4 font-semibold">VENDOR / COUNTERPARTY</th>
-                <th className="py-3 px-4 font-semibold text-right">BANK AMOUNT (₹)</th>
-                <th className="py-3 px-4 font-semibold text-center">PREDICTED CLASSIFICATION</th>
-                <th className="py-3 px-4 font-semibold text-center">GROUND TRUTH EXPECTED</th>
-                <th className="py-3 px-4 font-semibold text-center">INVOICE ID (ACTUAL / EXPECTED)</th>
-                <th className="py-3 px-4 font-semibold text-center">VERIFICATION RESULT</th>
+                <th className="py-2.5 px-3 font-semibold">TRANSACTION ID</th>
+                <th className="py-2.5 px-3 font-semibold">COUNTERPARTY</th>
+                <th className="py-2.5 px-3 font-semibold text-right">AMOUNT (₹)</th>
+                <th className="py-2.5 px-3 font-semibold text-center">PREDICTED CLASS</th>
+                <th className="py-2.5 px-3 font-semibold text-center">GROUND TRUTH</th>
+                <th className="py-2.5 px-3 font-semibold text-center">INVOICE LINK (ACTUAL / EXP)</th>
+                <th className="py-2.5 px-3 font-semibold text-center">AUDIT STATUS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2F2F2F] text-xs font-mono">
+            <tbody className="divide-y divide-[#1E2638] text-xs font-mono">
               {filteredAuditRecords.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-slate-400 font-mono">
-                    No matching audit records found.
+                  <td colSpan="7" className="py-10 text-center text-slate-400 font-mono text-xs">
+                    No matching validation records found.
                   </td>
                 </tr>
               ) : (
@@ -674,56 +520,56 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
                   return (
                     <tr 
                       key={r.transaction_id} 
-                      className={`hover:bg-[#212121] transition-colors ${!r.isCorrect ? 'bg-rose-950/20' : ''}`}
+                      className={`hover:bg-[#141A27] transition-colors ${!r.isCorrect ? 'bg-rose-950/20' : ''}`}
                     >
                       {/* Tx ID */}
-                      <td className="py-3 px-4 font-bold text-emerald-400">
+                      <td className="py-2.5 px-3 font-semibold text-emerald-400">
                         {r.transaction_id}
                       </td>
 
                       {/* Vendor */}
-                      <td className="py-3 px-4 font-medium text-slate-200">
+                      <td className="py-2.5 px-3 font-medium text-slate-200 font-sans">
                         {r.vendor || r.invoice_customer || 'N/A'}
                       </td>
 
                       {/* Amount */}
-                      <td className="py-3 px-4 text-right font-bold text-white">
+                      <td className="py-2.5 px-3 text-right font-bold text-white">
                         ₹{(r.amount || 0).toLocaleString('en-IN')}
                       </td>
 
                       {/* Predicted Status */}
-                      <td className="py-3 px-4 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${r.status === 'MATCH' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40' : r.status === 'AMOUNT_MISMATCH' ? 'bg-rose-950 text-rose-300 border border-rose-800/40' : r.status === 'DATE_MISMATCH' ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/40' : r.status === 'MULTIPLE_MATCHES' ? 'bg-amber-950 text-amber-300 border border-amber-800/40' : 'bg-purple-950 text-purple-300 border border-purple-800/40'}`}>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-block px-2 py-0.2 rounded text-[10px] font-medium ${r.status === 'MATCH' ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : r.status === 'AMOUNT_MISMATCH' ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20' : r.status === 'DATE_MISMATCH' ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20' : r.status === 'MULTIPLE_MATCHES' ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20' : 'bg-purple-500/10 text-purple-300 border border-purple-500/20'}`}>
                           {r.status}
                         </span>
                       </td>
 
                       {/* Expected Status */}
-                      <td className="py-3 px-4 text-center">
-                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-[#2F2F2F] text-slate-300 border border-[#3A3A3A]">
+                      <td className="py-2.5 px-3 text-center">
+                        <span className="inline-block px-2 py-0.2 rounded text-[10px] font-medium bg-[#141A27] text-slate-300 border border-[#1E2638]">
                           {r.expectedStatus}
                         </span>
                       </td>
 
                       {/* Invoice Actual vs Expected */}
-                      <td className="py-3 px-4 text-center text-slate-300">
-                        <span className="text-emerald-400 font-bold">{r.invoice_id || 'None'}</span>
+                      <td className="py-2.5 px-3 text-center text-slate-300">
+                        <span className="text-emerald-400 font-semibold">{r.invoice_id || 'None'}</span>
                         {r.expectedInvId && r.expectedInvId !== r.invoice_id && (
                           <span className="text-rose-400 ml-1">/ {r.expectedInvId}</span>
                         )}
                       </td>
 
                       {/* Verification Status */}
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-2.5 px-3 text-center">
                         {r.isCorrect ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                             <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                            VERIFIED MATCH
+                            VERIFIED
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-500/40">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded text-[10px] font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20">
                             <XCircle className="w-3 h-3 text-rose-400" />
-                            <span>MISMATCH</span>
+                            DELTA
                           </span>
                         )}
                       </td>

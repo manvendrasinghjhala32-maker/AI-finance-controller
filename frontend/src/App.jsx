@@ -158,11 +158,11 @@ export default function App() {
       setChatMessages([
         {
           role: 'assistant',
-          content: `👋 Hello! I have analyzed your uploaded dataset (${label}).\n\n` +
-            `• 📊 **${totalRecs} Total Transactions Processed**\n` +
-            `• ✅ **${matched} Clean Matches Reconciled**\n` +
-            `• ⚠️ **${exceptions} Discrepancies Requiring Review**\n\n` +
-            `You can ask any question about the data below, or navigate between the Exception Ledger, Cash Forecast, and GL Journal tabs above.`
+          content: `**Reconciliation Analysis Completed** (${label})\n\n` +
+            `• **${totalRecs} Transactions Processed**\n` +
+            `• **${matched} Reconciled Settlements**\n` +
+            `• **${exceptions} Discrepancies Flagged for Review**\n\n` +
+            `Ready for analytical queries or review of the Variance Ledger, 30-Day Liquidity Forecast, and General Ledger adjustments.`
         }
       ]);
     } catch (err) {
@@ -181,10 +181,10 @@ export default function App() {
       if (!res.ok) throw new Error('Failed to load demo dataset');
       const json = await res.json();
       // Smooth loading transition pause
-      await new Promise(r => setTimeout(r, 900));
+      await new Promise(r => setTimeout(r, 600));
 
       setData(json);
-      setActiveDatasetLabel('Demo Challenge Dataset (160 Messy Rows)');
+      setActiveDatasetLabel('Benchmark Dataset (160 Multi-Source Records)');
       setActiveTab('overview');
 
       if (json.records && json.records.length > 0) {
@@ -200,11 +200,11 @@ export default function App() {
       setChatMessages([
         {
           role: 'assistant',
-          content: `👋 Welcome! Loaded the Demo Dataset (${totalRecs} records).\n\n` +
-            `• 📊 **${totalRecs} Ingested Transactions** (${json.summary?.duplicate_count || 0} duplicates isolated)\n` +
-            `• ✅ **${matched} Verified Matches** (₹${matchedMoney.toLocaleString()} Reconciled)\n` +
-            `• ⚠️ **${exceptions} Active Exceptions** requiring review\n\n` +
-            `Feel free to ask questions below, or click any tab above to inspect exceptions, cash runway, or bookkeeping records!`
+          content: `**Enterprise Benchmark Dataset Loaded** (${totalRecs} transactions)\n\n` +
+            `• **${totalRecs} Ingested Records** (${json.summary?.duplicate_count || 0} duplicate entries isolated)\n` +
+            `• **${matched} Verified Matches** (₹${matchedMoney.toLocaleString()} reconciled)\n` +
+            `• **${exceptions} Active Variances** requiring review\n\n` +
+            `Proceed to the Variance Ledger or Liquidity Forecast to inspect variance forensics and journal entries.`
         }
       ]);
     } catch (err) {
@@ -232,15 +232,21 @@ export default function App() {
   };
 
   // Send Chat Message to Gemini Copilot
-  const handleSendMessage = async (userPrompt) => {
-    setChatMessages(prev => [...prev, { role: 'user', content: userPrompt }]);
+  const handleSendMessage = async (userPrompt, focusedTxParam = null) => {
+    const activeFocusedTx = focusedTxParam || focusedTxForChat || selectedTx || selectedTxId;
+    const newMessages = [...chatMessages, { role: 'user', content: userPrompt }];
+    setChatMessages(newMessages);
     setChatLoading(true);
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userPrompt }),
+        body: JSON.stringify({ 
+          message: userPrompt,
+          history: newMessages.slice(-6),
+          focused_transaction_id: activeFocusedTx?.transaction_id || (typeof activeFocusedTx === 'string' ? activeFocusedTx : null),
+        }),
       });
 
       if (!res.ok) throw new Error('Chat engine response error');
@@ -333,7 +339,7 @@ export default function App() {
 
     const promptText = `Explain the financial details, root cause, and adjustment applied for transaction ${txId} (${vendor}). Bank amount: ₹${amount.toLocaleString()}, Invoice amount: ₹${invAmount.toLocaleString()}, Variance: ₹${Math.abs(delta).toLocaleString()}, Original issue: ${originalStatus}, Adjustment: ${action}.`;
     
-    handleSendMessage(promptText);
+    handleSendMessage(promptText, tx);
   };
 
   // Export CSV helper
@@ -365,50 +371,54 @@ export default function App() {
   const resolvedCount = data.records.filter(r => r.is_resolved || r.resolution || r.resolution_action).length;
 
   const navItems = [
-    { id: 'overview', label: 'Overview', icon: LayoutGrid },
-    { id: 'ledger', label: 'Differences & Issues', icon: AlertTriangle, badge: exceptionsCount },
-    { id: 'benchmark', label: 'Benchmark & Accuracy', icon: ShieldCheck, badge: data?.metrics ? `${data.metrics.accuracy.toFixed(0)}%` : undefined },
-    { id: 'forecast', label: 'Cash Forecast (30 Days)', icon: TrendingUp },
-    { id: 'gl', label: 'Accounting Records', icon: FileSpreadsheet },
+    { id: 'overview', label: 'Executive Overview', icon: LayoutGrid },
+    { id: 'ledger', label: 'Variance Ledger', icon: AlertTriangle, badge: exceptionsCount },
+    { id: 'benchmark', label: 'Model Benchmark', icon: ShieldCheck, badge: data?.metrics ? `${data.metrics.accuracy.toFixed(0)}%` : undefined },
+    { id: 'forecast', label: '30-Day Liquidity', icon: TrendingUp },
+    { id: 'gl', label: 'General Ledger', icon: FileSpreadsheet },
   ];
 
   return (
-    <div className="min-h-screen bg-[#212121] text-slate-100 flex flex-col font-sans">
-      {/* Top Navigation Header */}
-      <header className="sticky top-0 z-40 bg-[#171717] border-b border-[#2F2F2F] px-6 py-3 shadow-lg select-none">
-        <div className="max-w-[1700px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-4">
-          {/* Brand & Dataset Badge */}
+    <div className="min-h-screen bg-[#0A0D14] text-slate-100 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-300">
+      {/* Executive Global Header */}
+      <header className="sticky top-0 z-40 bg-[#0D111A]/95 backdrop-blur-md border-b border-[#1E2638] px-6 py-2.5 shadow-sm select-none">
+        <div className="max-w-[1700px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
+          {/* Brand & Dataset Indicator */}
           <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-start">
-            <div className="flex items-center gap-2.5">
-              <img src="/finance_logo.png" alt="Finance Controller" className="w-8 h-8 rounded-lg object-contain" />
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg bg-[#141A27] border border-[#263147] flex items-center justify-center text-emerald-400 font-mono font-bold text-xs">
+                FC
+              </div>
               <div>
-                <h1 className="text-sm font-bold text-white tracking-wide leading-none">
-                  Finance Controlling Assistant
-                </h1>
-                <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
-                  📂 {activeDatasetLabel || 'Uploaded Records'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xs font-bold text-white tracking-wider uppercase font-mono">
+                    Financial Controller
+                  </h1>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                    AUTONOMOUS CORE
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono truncate max-w-[280px]">
+                  {activeDatasetLabel || 'Active Session Records'}
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-[#2F2F2F] px-2.5 py-1 rounded-full border border-emerald-500/30">
-                <Sparkles className="w-3 h-3 text-emerald-400" /> Smart AI Active
-              </span>
               {(summary.records_per_second || data.records_per_second) && (
                 <span 
-                  className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-purple-400 bg-[#2F2F2F] px-2.5 py-1 rounded-full border border-purple-500/30 shadow-sm"
-                  title={`Throughput speed: ${Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} records/sec in ${(summary.elapsed_seconds || data.elapsed_seconds || 0).toFixed(3)}s`}
+                  className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-slate-300 bg-[#141A27] px-2.5 py-0.5 rounded border border-[#1E2638]"
+                  title={`Engine Throughput: ${Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} records/sec in ${(summary.elapsed_seconds || data.elapsed_seconds || 0).toFixed(3)}s`}
                 >
-                  <Zap className="w-3 h-3 text-purple-400" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                   <span>{Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} rec/s</span>
                 </span>
               )}
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1.5 overflow-x-auto max-w-full py-1">
+          {/* Navigation Segmented Control */}
+          <nav className="flex items-center gap-1 overflow-x-auto max-w-full py-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -416,16 +426,16 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                     isActive
-                      ? 'bg-[#2F2F2F] text-white border border-emerald-500/40 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-[#3A3A3A]'
+                      ? 'bg-[#182030] text-white border border-[#2B374E] shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#131926]'
                   }`}
                 >
                   <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                   {item.badge !== undefined && item.badge > 0 && (
-                    <span className={`px-1.5 py-0.2 rounded-md text-[10px] font-bold font-mono ${isActive ? 'bg-[#3A3A3A] text-emerald-300' : 'bg-[#2F2F2F] text-rose-300 border border-rose-800/40'}`}>
+                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${isActive ? 'bg-[#222E44] text-emerald-300' : 'bg-[#182030] text-amber-300 border border-amber-500/20'}`}>
                       {item.badge}
                     </span>
                   )}
@@ -433,43 +443,43 @@ export default function App() {
               );
             })}
 
-            {/* Dedicated View Changes Tab Button */}
+            {/* Dedicated Audit Trail / View Changes Tab Button */}
             {resolvedCount > 0 && (
               <button
                 onClick={() => setActiveTab('changes')}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border shadow-sm ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border ${
                   activeTab === 'changes'
-                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-950/40'
-                    : 'bg-[#2F2F2F] text-emerald-400 border-emerald-500/40 hover:bg-[#3A3A3A] hover:text-emerald-300'
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 shadow-sm'
+                    : 'bg-[#141A27] text-emerald-400 border-emerald-500/30 hover:bg-[#1A2234]'
                 }`}
-                title="View audit trail of all applied modifications"
+                title="View compliance audit trail of all applied adjustments"
               >
                 <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                <span>View Changes</span>
-                <span className="px-1.5 py-0.2 rounded-full bg-emerald-950 text-emerald-300 text-[10px] font-mono border border-emerald-800/40 font-bold">
+                <span>Audit Trail</span>
+                <span className="px-1.5 py-0.2 rounded bg-emerald-900/60 text-emerald-300 text-[10px] font-mono border border-emerald-700/40">
                   {resolvedCount}
                 </span>
               </button>
             )}
           </nav>
 
-          {/* Right Action Buttons */}
-          <div className="flex items-center gap-2.5 w-full lg:w-auto justify-end">
+          {/* Right Action Utilities */}
+          <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
             <button
               onClick={() => handleExport('reconciliation')}
-              className="px-3 py-1.5 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 border border-[#3A3A3A] transition-all duration-200 btn-interactive"
-              title="Download Full Reconciliation CSV"
+              className="px-3 py-1.5 rounded-lg bg-[#141A27] hover:bg-[#1B2335] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 border border-[#1E2638] transition-colors"
+              title="Download Full Reconciliation Report"
             >
               <Download className="w-3.5 h-3.5 text-slate-400" />
               <span>Export CSV</span>
             </button>
             <button
               onClick={handleReset}
-              className="px-3 py-1.5 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] text-emerald-400 hover:text-emerald-300 text-xs font-bold flex items-center gap-1.5 border border-emerald-500/40 transition-all duration-200 btn-interactive shadow-sm hover:shadow-emerald-950/30"
-              title="Upload new bank and invoice documents"
+              className="px-3 py-1.5 rounded-lg bg-[#141A27] hover:bg-[#1B2335] text-emerald-400 hover:text-emerald-300 text-xs font-medium flex items-center gap-1.5 border border-emerald-500/30 transition-colors shadow-sm"
+              title="Ingest new financial documents"
             >
-              <RefreshCw className="w-3.5 h-3.5 group-hover:rotate-180 transition-transform duration-500" />
-              <span>Upload New Docs</span>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Ingest New Data</span>
             </button>
           </div>
         </div>

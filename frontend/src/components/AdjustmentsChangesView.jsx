@@ -190,32 +190,31 @@ export function AdjustmentsChangesView({
   }, [resolvedRecords, activeFilter, searchQuery]);
 
   return (
-    <div className="space-y-6 max-w-[1500px] mx-auto pb-12 animate-fade-in">
+    <div className="space-y-5 max-w-[1600px] mx-auto pb-10">
       {/* 1. Header Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#2F2F2F] pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {onBack && (
             <button
               onClick={onBack}
-              className="p-2 rounded-xl bg-[#2F2F2F] hover:bg-[#3A3A3A] text-slate-300 hover:text-white border border-[#3A3A3A] transition-all flex items-center gap-1.5 text-xs font-semibold"
-              title="Back to Differences & Issues"
+              className="p-1.5 rounded bg-[#141A27] hover:bg-[#1B2335] text-slate-300 hover:text-white border border-[#1E2638] transition-colors flex items-center gap-1.5 text-xs font-mono"
+              title="Return to Ledger"
             >
-              <ArrowLeft className="w-4 h-4 text-emerald-400" />
+              <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
               <span>Back</span>
             </button>
           )}
           <div>
-            <div className="flex items-center gap-2.5">
-              <img src="/finance_logo.png" alt="Changes" className="w-8 h-8 rounded-lg object-contain" />
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                View Changes & Applied Adjustments
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-white tracking-wide uppercase font-mono">
+                Audit Trail & Adjustments Ledger
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-emerald-950 text-emerald-300 border border-emerald-800/40 font-bold">
-                {resolvedRecords.length} Changes Made
+              <span className="px-2 py-0.2 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                {resolvedRecords.length} POSTED ADJUSTMENTS
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-sans mt-0.5">
-              Simple before-and-after history of all payment fee adjustments, approved date delays, and billing requests.
+            <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+              GAAP compliant before-and-after audit trail of fee debit postings, clearance approvals, and AP vouchers
             </p>
           </div>
         </div>
@@ -223,83 +222,83 @@ export function AdjustmentsChangesView({
         {resolvedRecords.length > 0 && onExport && (
           <button
             onClick={() => onExport('adjustments')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-400 bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-emerald-500/40 shadow-sm transition-all"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono text-emerald-400 bg-[#141A27] hover:bg-[#1B2335] border border-emerald-500/30 transition-colors self-start sm:self-auto"
           >
-            <Download className="w-4 h-4" />
-            <span className="font-mono">Export Changes (CSV)</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Audit Trail (CSV)</span>
           </button>
         )}
       </div>
 
-      {/* 2. Top Summary Cards (Simple, Big, Clear) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-[#171717] border border-[#2F2F2F] rounded-xl p-5 shadow-sm">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Total Adjustments Applied
+      {/* 2. Top Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-[#111622] border border-[#1E2638] rounded-xl p-4 shadow-sm card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            POSTED ADJUSTMENTS
           </span>
-          <div className="text-3xl font-black font-mono text-emerald-400 mt-2">
+          <div className="text-xl font-bold font-mono text-emerald-400 mt-1.5">
             {resolvedRecords.length}
           </div>
-          <span className="text-xs text-slate-400 mt-1 block">
-            Transactions adjusted and verified
+          <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
+            Transactions audited and reconciled
           </span>
         </div>
 
-        <div className="bg-[#171717] border border-amber-500/40 rounded-xl p-5 shadow-sm">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Total Fee Expenses Logged
+        <div className="bg-[#111622] border border-[#1E2638] rounded-xl p-4 shadow-sm card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            TOTAL EXPENSE RECOGNIZED
           </span>
-          <div className="text-3xl font-black font-mono text-amber-400 mt-2">
+          <div className="text-xl font-bold font-mono text-amber-400 mt-1.5">
             ₹{totalAdjustedFeeAmount.toLocaleString('en-IN')}
           </div>
-          <span className="text-xs text-slate-400 mt-1 block">
-            {feeAdjustments.length} bank processing fee adjustments (GL-6150)
+          <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
+            {feeAdjustments.length} banking fee adjustments (GL-6150)
           </span>
         </div>
 
-        <div className="bg-[#171717] border border-cyan-500/40 rounded-xl p-5 shadow-sm">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-            Net Reconciliation Status
+        <div className="bg-[#111622] border border-[#1E2638] rounded-xl p-4 shadow-sm card-interactive">
+          <span className="text-[10px] font-mono font-medium text-slate-400 uppercase tracking-wider">
+            TRIAL BALANCE COMPLIANCE
           </span>
-          <div className="text-3xl font-black font-mono text-cyan-300 mt-2">
-            Balanced ₹0.00
+          <div className="text-xl font-bold font-mono text-blue-300 mt-1.5">
+            Balanced Δ ₹0.00
           </div>
-          <span className="text-xs text-slate-400 mt-1 block">
-            All adjusted entries balanced to zero variance
+          <span className="text-[11px] text-slate-400 font-sans mt-0.5 block">
+            Debits equal credits across all vouchers
           </span>
         </div>
       </div>
 
       {/* 3. Search & Filter Bar */}
       {resolvedRecords.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#171717] p-3 rounded-xl border border-[#2F2F2F]">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#111622] p-3 rounded-xl border border-[#1E2638]">
           {/* Search Box */}
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative w-full sm:w-72">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search transaction ID, customer, vendor..."
+              placeholder="Filter transaction ID, counterparty..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-[#212121] border border-[#2F2F2F] rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono transition"
+              className="w-full pl-8 pr-2.5 py-1 bg-[#141A27] border border-[#1E2638] rounded text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono transition-colors"
             />
           </div>
 
           {/* Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto text-xs font-mono">
+          <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto text-xs font-mono">
             {[
-              { id: 'ALL', label: `All Changes (${resolvedRecords.length})` },
-              { id: 'AMOUNT', label: `Price Adjustments (${feeAdjustments.length})` },
-              { id: 'DATE', label: `Date Approvals (${dateAdjustments.length})` },
-              { id: 'MISSING', label: `Billing Requests (${apAdjustments.length})` }
+              { id: 'ALL', label: `All (${resolvedRecords.length})` },
+              { id: 'AMOUNT', label: `Fee Postings (${feeAdjustments.length})` },
+              { id: 'DATE', label: `Timing Approvals (${dateAdjustments.length})` },
+              { id: 'MISSING', label: `AP Requests (${apAdjustments.length})` }
             ].map(f => (
               <button
                 key={f.id}
                 onClick={() => setActiveFilter(f.id)}
-                className={`px-3 py-1 rounded-lg transition whitespace-nowrap ${
+                className={`px-2.5 py-1 rounded text-xs transition-colors whitespace-nowrap ${
                   activeFilter === f.id
-                    ? 'bg-[#2F2F2F] text-emerald-400 border border-emerald-500/40 font-bold'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-[#2F2F2F]'
+                    ? 'bg-[#182030] text-emerald-400 border border-emerald-500/30 font-semibold'
+                    : 'bg-[#141A27] text-slate-400 border border-[#1E2638] hover:bg-[#182030] hover:text-slate-200'
                 }`}
               >
                 {f.label}
@@ -311,40 +310,40 @@ export function AdjustmentsChangesView({
 
       {/* 4. Main Tabular Changes View */}
       {resolvedRecords.length === 0 ? (
-        <div className="p-12 text-center bg-[#171717] border border-[#2F2F2F] rounded-2xl space-y-4 shadow-xl">
-          <div className="w-14 h-14 rounded-2xl bg-[#2F2F2F] text-amber-400 flex items-center justify-center mx-auto text-2xl border border-amber-500/30">
-            📑
+        <div className="p-10 text-center bg-[#111622] border border-[#1E2638] rounded-xl space-y-3 shadow-sm">
+          <div className="w-10 h-10 rounded-lg bg-[#141A27] text-amber-400 border border-[#1E2638] flex items-center justify-center mx-auto text-lg">
+            <FileCheck className="w-5 h-5 text-amber-400" />
           </div>
           <div className="max-w-md mx-auto space-y-1">
-            <h3 className="text-base font-bold text-white">No Changes Applied Yet</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              When you click quick fix buttons like "Adjust Processing Fee", "Approve Date Delay", or "Request Missing Bill", the clear before-and-after breakdown of changes will appear here.
+            <h3 className="text-xs font-bold text-white font-mono uppercase tracking-wide">No Adjustments Executed Yet</h3>
+            <p className="text-xs text-slate-400 font-sans leading-relaxed">
+              When variances are resolved in the Variance Ledger, the complete double-entry before-and-after audit record will be logged here.
             </p>
           </div>
           {onBack && (
             <button
               onClick={onBack}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-md inline-flex items-center gap-1.5"
+              className="px-3 py-1.5 bg-[#141A27] hover:bg-[#1B2335] text-emerald-400 border border-emerald-500/30 text-xs font-mono rounded transition-colors inline-flex items-center gap-1.5"
             >
-              <span>Go to Differences & Issues</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <span>Inspect Variance Ledger</span>
+              <ArrowRight className="w-3 h-3" />
             </button>
           )}
         </div>
       ) : (
-        <div className="bg-[#171717] border border-[#2F2F2F] rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
+        <div className="bg-[#111622] border border-[#1E2638] rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto bg-[#0E131E]">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-[#212121] border-b border-[#2F2F2F] text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <thead className="bg-[#0E131E] border-b border-[#1E2638] text-[10px] font-mono uppercase tracking-wider text-slate-400">
                 <tr>
-                  <th className="py-3.5 px-4 font-semibold">TRANSACTION & VENDOR</th>
-                  <th className="py-3.5 px-4 font-semibold">ORIGINAL ISSUE (BEFORE)</th>
-                  <th className="py-3.5 px-4 font-semibold">HOW IT WAS FIXED (AFTER)</th>
-                  <th className="py-3.5 px-4 font-semibold text-center">STATUS</th>
-                  <th className="py-3.5 px-4 font-semibold text-center">ACTIONS</th>
+                  <th className="py-2.5 px-3 font-semibold">TRANSACTION & COUNTERPARTY</th>
+                  <th className="py-2.5 px-3 font-semibold">INITIAL VARIANCE (BEFORE)</th>
+                  <th className="py-2.5 px-3 font-semibold">ADJUSTMENT POSTING (AFTER)</th>
+                  <th className="py-2.5 px-3 font-semibold text-center">TRIAL BALANCE</th>
+                  <th className="py-2.5 px-3 font-semibold text-center">AUDIT ACTIONS</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#2F2F2F] text-xs font-mono">
+              <tbody className="divide-y divide-[#1E2638] text-xs font-mono">
                 {filteredRecords.map((r) => {
                   const exp = getAdjustmentExplanation(r);
                   const Icon = exp.icon;
@@ -352,62 +351,62 @@ export function AdjustmentsChangesView({
                   return (
                     <tr 
                       key={r.transaction_id}
-                      className="hover:bg-[#212121] transition-colors group cursor-pointer"
+                      className="hover:bg-[#141A27] transition-colors cursor-pointer"
                       onClick={() => setSelectedAdjustment(r)}
                     >
                       {/* 1. Transaction & Vendor */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-emerald-400 bg-[#2F2F2F] px-2 py-0.5 rounded text-xs">
+                          <span className="font-semibold text-emerald-400 text-xs">
                             {r.transaction_id}
                           </span>
-                          <span className="font-bold text-white text-xs">
-                            {r.vendor || r.invoice_customer || r.payment_merchant || 'Customer'}
+                          <span className="font-medium text-white text-xs font-sans">
+                            {r.vendor || r.invoice_customer || r.payment_merchant || 'Counterparty'}
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2">
-                          <span>📅 {r.date || 'N/A'}</span>
+                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2 font-mono">
+                          <span>{r.date || 'N/A'}</span>
                           <span>•</span>
                           <span>Bank: <strong>₹{(r.amount || 0).toLocaleString('en-IN')}</strong></span>
                           {r.invoice_amount && (
                             <>
                               <span>•</span>
-                              <span>Bill: <strong>₹{Number(r.invoice_amount).toLocaleString('en-IN')}</strong></span>
+                              <span>Invoiced: <strong>₹{Number(r.invoice_amount).toLocaleString('en-IN')}</strong></span>
                             </>
                           )}
                         </div>
                       </td>
 
                       {/* 2. Original Issue (Before) */}
-                      <td className="py-3.5 px-4">
-                        <div className="text-xs text-rose-300 font-sans leading-relaxed">
+                      <td className="py-2.5 px-3">
+                        <div className="text-xs text-rose-400 font-sans leading-relaxed">
                           {exp.issueSummary}
                         </div>
                       </td>
 
                       {/* 3. How it was Fixed (After) */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-2.5 px-3">
                         <div className="flex items-center gap-2">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold border ${exp.badgeStyle}`}>
-                            <Icon className="w-3.5 h-3.5" />
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.2 rounded text-[10px] font-medium border ${exp.badgeStyle}`}>
+                            <Icon className="w-3 h-3" />
                             {exp.badge}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-300 font-sans mt-1 leading-snug">
+                        <p className="text-[11px] text-slate-300 font-sans mt-0.5 leading-snug">
                           {exp.fixSummary}
                         </p>
                       </td>
 
                       {/* 4. Status Badge */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 text-[10px] font-bold border border-emerald-800/40 shadow-sm">
-                          <Check className="w-3 h-3 text-emerald-400" />
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                          <Check className="w-2.5 h-2.5 text-emerald-400" />
                           BALANCED
                         </span>
                       </td>
 
                       {/* 5. Actions: Details, Ask AI, Undo */}
-                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           {/* Details Button */}
                           <button
@@ -415,11 +414,11 @@ export function AdjustmentsChangesView({
                               e.stopPropagation();
                               setSelectedAdjustment(r);
                             }}
-                            className="px-2.5 py-1 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] text-slate-300 hover:text-white border border-[#3A3A3A] transition text-[11px] font-sans inline-flex items-center gap-1 shadow-sm"
-                            title="See step-by-step breakdown of this adjustment"
+                            className="px-2 py-0.5 rounded bg-[#141A27] hover:bg-[#1C2436] text-slate-300 hover:text-white border border-[#1E2638] transition-colors text-[10px] font-mono inline-flex items-center gap-1"
+                            title="Audit breakdown"
                           >
-                            <Info className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>Details</span>
+                            <Info className="w-3 h-3 text-blue-400" />
+                            <span>Audit</span>
                           </button>
 
                           {/* Ask AI Button */}
@@ -429,11 +428,11 @@ export function AdjustmentsChangesView({
                                 e.stopPropagation();
                                 onAskAI(r);
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-[#2F2F2F] hover:bg-emerald-950/60 text-emerald-400 hover:text-emerald-300 border border-emerald-500/40 transition text-[11px] font-sans font-bold inline-flex items-center gap-1 shadow-sm"
-                              title={`Chat with AI about transaction ${r.transaction_id}`}
+                              className="px-2 py-0.5 rounded bg-[#141A27] hover:bg-[#1C2436] text-emerald-400 border border-emerald-500/30 transition-colors text-[10px] font-mono inline-flex items-center gap-1"
+                              title={`Copilot inquiry for ${r.transaction_id}`}
                             >
-                              <Bot className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>Ask AI</span>
+                              <Bot className="w-3 h-3 text-emerald-400" />
+                              <span>Copilot</span>
                             </button>
                           )}
 
@@ -444,10 +443,10 @@ export function AdjustmentsChangesView({
                                 e.stopPropagation();
                                 onRevert(r.transaction_id);
                               }}
-                              className="p-1.5 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] text-slate-400 hover:text-rose-400 border border-[#3A3A3A] transition text-[11px]"
-                              title="Undo this change and restore original discrepancy"
+                              className="p-1 rounded bg-[#141A27] hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-[#1E2638] transition-colors text-[10px]"
+                              title="Revert adjustment"
                             >
-                              <RotateCcw className="w-3.5 h-3.5" />
+                              <RotateCcw className="w-3 h-3" />
                             </button>
                           )}
                         </div>
@@ -472,43 +471,40 @@ export function AdjustmentsChangesView({
             onClick={() => setSelectedAdjustment(null)}
           >
             <div 
-              className="bg-[#171717] border border-[#2F2F2F] rounded-2xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl space-y-6 animate-scale-up"
+              className="bg-[#111622] border border-[#1E2638] rounded-xl max-w-xl w-full p-5 sm:p-6 shadow-2xl space-y-4"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-[#2F2F2F] pb-4">
-                <div className="flex items-center gap-3">
-                  <img src="/finance_logo.png" alt="Adjustment" className="w-10 h-10 object-contain" />
-                  <div>
-                    <h2 className="text-base font-bold text-white flex items-center gap-2">
-                      <span>{selectedAdjustment.transaction_id} Adjustment Breakdown</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/40">
-                        ✓ Balanced
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-400 font-sans mt-0.5">
-                      {selectedAdjustment.vendor || selectedAdjustment.invoice_customer || 'Customer'} • Date: {selectedAdjustment.date || 'N/A'}
-                    </p>
-                  </div>
+              <div className="flex items-center justify-between border-b border-[#1E2638] pb-3">
+                <div>
+                  <h2 className="text-xs font-bold text-white font-mono uppercase tracking-wide flex items-center gap-2">
+                    <span>{selectedAdjustment.transaction_id} Adjustment Audit</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Balanced
+                    </span>
+                  </h2>
+                  <p className="text-[11px] text-slate-400 font-sans mt-0.5">
+                    {selectedAdjustment.vendor || selectedAdjustment.invoice_customer || 'Counterparty'} • Date: {selectedAdjustment.date || 'N/A'}
+                  </p>
                 </div>
 
                 <button 
                   onClick={() => setSelectedAdjustment(null)}
-                  className="p-1.5 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] text-slate-400 hover:text-white transition"
+                  className="p-1 rounded bg-[#141A27] hover:bg-[#1C2436] text-slate-400 hover:text-white transition-colors"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Step-by-Step Explanation List */}
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
-                  Step-by-Step Audit Breakdown:
+              <div className="space-y-2">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
+                  GAAP Audit Trail Breakdown:
                 </h3>
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   {exp.steps.map((step, idx) => (
-                    <div key={idx} className="p-3.5 rounded-xl bg-[#212121] border border-[#2F2F2F] space-y-1">
-                      <div className="text-xs font-bold text-emerald-400 font-mono">
+                    <div key={idx} className="p-3 rounded-lg bg-[#0E131E] border border-[#1E2638] space-y-0.5">
+                      <div className="text-[11px] font-bold text-emerald-400 font-mono">
                         {step.label}
                       </div>
                       <div className="text-xs text-slate-200 font-sans leading-relaxed">
@@ -520,7 +516,7 @@ export function AdjustmentsChangesView({
               </div>
 
               {/* Modal Bottom Actions */}
-              <div className="flex items-center justify-between pt-2 border-t border-[#2F2F2F]">
+              <div className="flex items-center justify-between pt-2 border-t border-[#1E2638]">
                 {onAskAI ? (
                   <button
                     onClick={() => {
@@ -528,16 +524,16 @@ export function AdjustmentsChangesView({
                       setSelectedAdjustment(null);
                       onAskAI(tx);
                     }}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md transition"
+                    className="px-3 py-1.5 rounded bg-[#141A27] hover:bg-[#1B2335] text-emerald-400 border border-emerald-500/30 text-xs font-mono flex items-center gap-1.5 transition-colors"
                   >
-                    <Bot className="w-4 h-4" />
-                    <span>Ask AI About This Transaction</span>
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>Inquire with Copilot</span>
                   </button>
                 ) : <div />}
 
                 <button
                   onClick={() => setSelectedAdjustment(null)}
-                  className="px-4 py-2 rounded-xl bg-[#2F2F2F] hover:bg-[#3A3A3A] text-slate-300 text-xs font-semibold transition"
+                  className="px-3 py-1.5 rounded bg-[#141A27] hover:bg-[#1B2335] text-slate-300 text-xs font-mono transition-colors"
                 >
                   Close
                 </button>

@@ -232,8 +232,8 @@ def print_final_report(
     print(f"\n  THROUGHPUT")
     if elapsed is not None and elapsed > 0:
         print(f"  Processed {total} records in {elapsed:.3f}s ({total / elapsed:.0f} records/sec)")
-        print(f"  {'Reconciliation speed':<32}: {total / elapsed:,.0f} records/sec")
-        print(f"  {'Elapsed execution time':<32}: {elapsed:.3f}s")
+        print(f"  {'Reconciliation Engine Throughput':<34}: {total / elapsed:,.0f} records/sec")
+        print(f"  {'Elapsed execution time':<34}: {elapsed:.3f}s")
     print(f"  {'Total records processed':<32}: {total:>8}")
     print(f"  {'Duplicates detected & removed':<32}: {status_counts.get(STATUS_DUPLICATE, 0):>8}")
     print(f"  {'Clean records evaluated':<32}: {non_dup_total:>8}")

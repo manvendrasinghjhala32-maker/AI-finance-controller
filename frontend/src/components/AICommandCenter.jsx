@@ -34,71 +34,71 @@ export function AICommandCenter({
   const isResolved = selectedTx?.is_resolved;
 
   return (
-    <div className="figma-card flex flex-col h-full overflow-hidden shadow-xl bg-[#171717] border border-[#2F2F2F]">
+    <div className="figma-card flex flex-col h-full overflow-hidden shadow-sm bg-[#111622] border border-[#1E2638]">
       {/* 1. Header */}
-      <div className="p-4 border-b border-[#2F2F2F] bg-[#171717] flex items-center justify-between">
+      <div className="p-3.5 border-b border-[#1E2638] bg-[#111622] flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#2F2F2F] border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-            <Bot className="w-4 h-4" />
+          <div className="w-7 h-7 rounded bg-[#141A27] border border-[#1E2638] flex items-center justify-center text-emerald-400 font-mono text-xs">
+            <Bot className="w-3.5 h-3.5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-white tracking-wide font-mono">
-                AI ISSUE INSPECTOR
+              <h2 className="text-xs font-bold text-white tracking-wide font-mono uppercase">
+                FORENSIC VARIANCE INSPECTOR
               </h2>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
             </div>
-            <p className="text-[11px] text-slate-400 font-mono">
-              {selectedTx ? `Transaction ${selectedTx.transaction_id}` : 'Select a record to inspect'}
+            <p className="text-[10px] text-slate-400 font-mono">
+              {selectedTx ? `TX: ${selectedTx.transaction_id}` : 'Select a record to inspect'}
             </p>
           </div>
         </div>
 
         {selectedTx && (
-          <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-md bg-[#2F2F2F] text-emerald-400 border border-emerald-500/30">
+          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-[#141A27] text-slate-300 border border-[#1E2638]">
             {selectedTx.status === 'AMOUNT_MISMATCH' 
-              ? 'PRICE DELTA' 
+              ? 'PRICE VARIANCE' 
               : selectedTx.status === 'DATE_MISMATCH' 
-              ? 'DATE DELAY' 
+              ? 'TIMING DRIFT' 
               : selectedTx.status === 'MISSING_INVOICE' 
-              ? 'MISSING BILL' 
+              ? 'UNBILLED' 
               : selectedTx.status === 'MULTIPLE_MATCHES'
-              ? 'MULTI CANDIDATES'
+              ? 'MULTI-MATCH'
               : selectedTx.status}
           </span>
         )}
       </div>
 
       {/* 2. Body / Inspector Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#171717]">
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-[#0E131E]">
         {selectedTx ? (
           <>
             {/* AI Diagnosis Card */}
-            <div className="p-3.5 rounded-xl bg-[#212121] border border-emerald-500/30 space-y-2">
+            <div className="p-3 rounded-lg bg-[#111622] border border-[#1E2638] space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-emerald-400 flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-emerald-400" />
-                  AI EXPLANATION
+                <span className="text-[10px] font-mono font-semibold tracking-wider uppercase text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  ROOT-CAUSE FORENSICS
                 </span>
                 {selectedTx.confidence_score && (
-                  <span className="text-[10px] font-mono text-emerald-400">
+                  <span className="text-[10px] font-mono text-slate-400">
                     {selectedTx.confidence_score}% Confidence
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-200 leading-relaxed font-sans">
-                {selectedTx.ai_explanation || selectedTx.explanation || selectedTx.reason || 'A price or date difference was found between the bank and invoices.'}
+                {selectedTx.ai_explanation || selectedTx.explanation || selectedTx.reason || 'Identified variance between reported banking statement and accounting ledger.'}
               </p>
             </div>
 
             {/* Comparison Grid (3 Cards) */}
-            <div className="grid grid-cols-3 gap-2.5 text-xs font-mono">
+            <div className="grid grid-cols-3 gap-2 text-xs font-mono">
               {/* Card 1: Amount Math */}
-              <div className="p-3 rounded-lg bg-[#212121] border border-[#2F2F2F] flex flex-col justify-between">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase">
-                  PRICE DIFFERENCE
+              <div className="p-2.5 rounded bg-[#111622] border border-[#1E2638] flex flex-col justify-between">
+                <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">
+                  PRICE DELTA
                 </span>
-                <div className="my-1 text-sm font-bold text-white">
+                <div className="my-1 text-xs font-bold text-white">
                   {deltaVal !== 0 ? (
                     <span className={deltaVal > 0 ? 'text-amber-400' : 'text-rose-400'}>
                       {deltaVal > 0 ? `+₹${deltaVal.toLocaleString('en-IN')}` : `-₹${Math.abs(deltaVal).toLocaleString('en-IN')}`}
@@ -107,17 +107,17 @@ export function AICommandCenter({
                     <span className="text-emerald-400">₹0.00</span>
                   )}
                 </div>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[10px] text-slate-400 truncate">
                   Bank: ₹{selectedTx.amount?.toLocaleString('en-IN')}
                 </span>
               </div>
 
               {/* Card 2: Date Drift */}
-              <div className="p-3 rounded-lg bg-[#212121] border border-[#2F2F2F] flex flex-col justify-between">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase">
-                  DATE DELAY
+              <div className="p-2.5 rounded bg-[#111622] border border-[#1E2638] flex flex-col justify-between">
+                <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">
+                  SETTLEMENT LAG
                 </span>
-                <div className="my-1 text-sm font-bold text-cyan-400">
+                <div className="my-1 text-xs font-bold text-blue-400">
                   {selectedTx.date_delta_days ? `${selectedTx.date_delta_days > 0 ? '+' : ''}${selectedTx.date_delta_days}d` : '0d offset'}
                 </div>
                 <span className="text-[10px] text-slate-400 truncate">
@@ -126,11 +126,11 @@ export function AICommandCenter({
               </div>
 
               {/* Card 3: Entity Similarity */}
-              <div className="p-3 rounded-lg bg-[#212121] border border-[#2F2F2F] flex flex-col justify-between">
-                <span className="text-[10px] text-slate-400 font-semibold uppercase">
-                  NAME MATCH
+              <div className="p-2.5 rounded bg-[#111622] border border-[#1E2638] flex flex-col justify-between">
+                <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wider">
+                  ENTITY MATCH
                 </span>
-                <div className="my-1 text-sm font-bold text-emerald-400">
+                <div className="my-1 text-xs font-bold text-emerald-400">
                   {selectedTx.merchant_match_score != null 
                     ? `${Math.round(selectedTx.merchant_match_score)}%` 
                     : (selectedTx.status === 'MISSING_INVOICE' ? 'No Bill' : '100%')}
@@ -141,21 +141,21 @@ export function AICommandCenter({
               </div>
             </div>
 
-            {/* 1-Click Action Button (Only the single action in use) */}
-            <div className="space-y-2 pt-1">
-              <div className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
-                <span>QUICK FIX ACTION</span>
-                <span className="text-[10px] text-emerald-400 font-mono font-normal">
-                  {selectedTx?.status === 'AMOUNT_MISMATCH' ? 'Price Adjustment' : selectedTx?.status === 'DATE_MISMATCH' ? 'Timing Approval' : selectedTx?.status === 'MISSING_INVOICE' ? 'AP Vendor Request' : selectedTx?.status === 'DUPLICATE' ? 'Duplicate Check' : 'Verified'}
+            {/* 1-Click Action Resolution */}
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                <span>AUDIT RESOLUTION ACTION</span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {selectedTx?.status === 'AMOUNT_MISMATCH' ? 'Fee Adjustment' : selectedTx?.status === 'DATE_MISMATCH' ? 'Transit Approval' : selectedTx?.status === 'MISSING_INVOICE' ? 'AP Request' : 'Verified'}
                 </span>
               </div>
 
               {isResolved ? (
-                <div className="p-3 rounded-lg bg-[#212121] border border-emerald-500/40 space-y-2.5">
+                <div className="p-3 rounded-lg bg-[#111622] border border-emerald-500/30 space-y-2">
                   <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-emerald-400 flex items-center gap-1.5 font-bold">
-                      <CheckCircle className="w-4 h-4 text-emerald-400" />
-                      ADJUSTMENT APPLIED & FIXED
+                    <span className="text-emerald-400 flex items-center gap-1.5 font-bold text-[11px]">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      ADJUSTMENT POSTED & BALANCED
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
                       {selectedTx.resolution?.action || selectedTx.resolution_action || 'RESOLVED'}
@@ -164,10 +164,10 @@ export function AICommandCenter({
                   {onViewChanges && (
                     <button
                       onClick={onViewChanges}
-                      className="w-full py-2 px-3 bg-[#2F2F2F] hover:bg-[#3A3A3A] text-emerald-400 hover:text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-bold font-mono transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="w-full py-1.5 px-2.5 bg-[#141A27] hover:bg-[#1C2436] text-emerald-400 border border-emerald-500/30 rounded text-xs font-mono transition-colors flex items-center justify-center gap-1.5"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>View Changes & Audit Log →</span>
+                      <span>Audit Trail & Compliance Log →</span>
                     </button>
                   )}
                 </div>
@@ -178,12 +178,12 @@ export function AICommandCenter({
                     <button
                       onClick={() => handleAction('post_fee_adjustment', 'Payment fee adjusted to GL-6150')}
                       disabled={resolving}
-                      className="w-full p-3 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-amber-500/40 text-amber-300 text-left transition-colors flex items-center gap-3 shadow-sm card-interactive"
+                      className="w-full p-2.5 rounded bg-[#111622] hover:bg-[#161E2E] border border-rose-500/30 hover:border-rose-500/50 text-left transition-colors flex items-center gap-2.5 shadow-sm"
                     >
-                      <FileCheck className="w-5 h-5 shrink-0 text-amber-400" />
+                      <FileCheck className="w-4 h-4 shrink-0 text-rose-400" />
                       <div>
-                        <div className="font-bold text-sm">Adjust Processing Fee</div>
-                        <div className="text-xs text-slate-400 font-sans">Fix ₹{Math.abs(deltaVal) || 150} fee difference (GL-6150)</div>
+                        <div className="font-semibold text-xs text-slate-200">Post Processing Fee (GL-6150)</div>
+                        <div className="text-[11px] text-slate-400 font-sans">Adjust ₹{Math.abs(deltaVal) || 150} fee variance to debit expense</div>
                       </div>
                     </button>
                   )}
@@ -193,12 +193,12 @@ export function AICommandCenter({
                     <button
                       onClick={() => handleAction('accept_date_drift', 'Approved settlement delay')}
                       disabled={resolving}
-                      className="w-full p-3 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-cyan-500/40 text-cyan-300 text-left transition-colors flex items-center gap-3 shadow-sm card-interactive"
+                      className="w-full p-2.5 rounded bg-[#111622] hover:bg-[#161E2E] border border-blue-500/30 hover:border-blue-500/50 text-left transition-colors flex items-center gap-2.5 shadow-sm"
                     >
-                      <Clock className="w-5 h-5 shrink-0 text-cyan-400" />
+                      <Clock className="w-4 h-4 shrink-0 text-blue-400" />
                       <div>
-                        <div className="font-bold text-sm">Approve Date Delay</div>
-                        <div className="text-xs text-slate-400 font-sans">Accept bank processing lag ({Math.abs(selectedTx?.date_delta_days || 0)} days)</div>
+                        <div className="font-semibold text-xs text-slate-200">Approve Settlement Transit Window</div>
+                        <div className="text-[11px] text-slate-400 font-sans">Accept {Math.abs(selectedTx?.date_delta_days || 0)}-day banking clearance transit delay</div>
                       </div>
                     </button>
                   )}
@@ -208,12 +208,12 @@ export function AICommandCenter({
                     <button
                       onClick={() => handleAction('request_bill_ap', 'Bill request sent to seller')}
                       disabled={resolving}
-                      className="w-full p-3 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-rose-500/40 text-rose-300 text-left transition-colors flex items-center gap-3 shadow-sm card-interactive"
+                      className="w-full p-2.5 rounded bg-[#111622] hover:bg-[#161E2E] border border-purple-500/30 hover:border-purple-500/50 text-left transition-colors flex items-center gap-2.5 shadow-sm"
                     >
-                      <FileText className="w-5 h-5 shrink-0 text-rose-400" />
+                      <FileText className="w-4 h-4 shrink-0 text-purple-400" />
                       <div>
-                        <div className="font-bold text-sm">Request Missing Bill</div>
-                        <div className="text-xs text-slate-400 font-sans">Ask seller/vendor for missing invoice</div>
+                        <div className="font-semibold text-xs text-slate-200">Request AP Vendor Invoice</div>
+                        <div className="text-[11px] text-slate-400 font-sans">Queue automated tax bill request to vendor</div>
                       </div>
                     </button>
                   )}
@@ -223,12 +223,12 @@ export function AICommandCenter({
                     <button
                       onClick={() => handleAction('confirm_multi_match', 'Reviewed and resolved shared PO candidate')}
                       disabled={resolving}
-                      className="w-full p-3 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-amber-500/40 text-amber-300 text-left transition-colors flex items-center gap-3 shadow-sm card-interactive"
+                      className="w-full p-2.5 rounded bg-[#111622] hover:bg-[#161E2E] border border-amber-500/30 hover:border-amber-500/50 text-left transition-colors flex items-center gap-2.5 shadow-sm"
                     >
-                      <FileCheck className="w-5 h-5 shrink-0 text-amber-400" />
+                      <FileCheck className="w-4 h-4 shrink-0 text-amber-400" />
                       <div>
-                        <div className="font-bold text-sm">Review Shared PO Invoices</div>
-                        <div className="text-xs text-slate-400 font-sans">Select matching invoice for PO {selectedTx?.reference || ''}</div>
+                        <div className="font-semibold text-xs text-slate-200">Confirm Shared PO Allocation</div>
+                        <div className="text-[11px] text-slate-400 font-sans">Map transaction to PO reference {selectedTx?.reference || ''}</div>
                       </div>
                     </button>
                   )}
@@ -238,12 +238,12 @@ export function AICommandCenter({
                     <button
                       onClick={() => handleAction('manual_override', 'Duplicate transaction marked and verified')}
                       disabled={resolving}
-                      className="w-full p-3 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-purple-500/40 text-purple-300 text-left transition-colors flex items-center gap-3 shadow-sm card-interactive"
+                      className="w-full p-2.5 rounded bg-[#111622] hover:bg-[#161E2E] border border-slate-500/30 text-left transition-colors flex items-center gap-2.5 shadow-sm"
                     >
-                      <Check className="w-5 h-5 shrink-0 text-purple-400" />
+                      <Check className="w-4 h-4 shrink-0 text-slate-400" />
                       <div>
-                        <div className="font-bold text-sm">Mark Duplicate Verified</div>
-                        <div className="text-xs text-slate-400 font-sans">Confirm and isolate duplicate entry</div>
+                        <div className="font-semibold text-xs text-slate-200">Isolate Duplicate Entry</div>
+                        <div className="text-[11px] text-slate-400 font-sans">Confirm duplicate and exclude from active ledger</div>
                       </div>
                     </button>
                   )}
@@ -253,12 +253,12 @@ export function AICommandCenter({
                     <button
                       onClick={() => handleAction('manual_override', 'Transaction reviewed and approved')}
                       disabled={resolving}
-                      className="w-full p-3 rounded-lg bg-[#2F2F2F] hover:bg-[#3A3A3A] border border-emerald-500/40 text-emerald-300 text-left transition-colors flex items-center gap-3 shadow-sm card-interactive"
+                      className="w-full p-2.5 rounded bg-[#111622] hover:bg-[#161E2E] border border-emerald-500/30 text-left transition-colors flex items-center gap-2.5 shadow-sm"
                     >
-                      <Check className="w-5 h-5 shrink-0 text-emerald-400" />
+                      <Check className="w-4 h-4 shrink-0 text-emerald-400" />
                       <div>
-                        <div className="font-bold text-sm">Mark as Approved</div>
-                        <div className="text-xs text-slate-400 font-sans">Approve and close issue</div>
+                        <div className="font-semibold text-xs text-slate-200">Mark Transaction Verified</div>
+                        <div className="text-[11px] text-slate-400 font-sans">Approve reconciliation and close entry</div>
                       </div>
                     </button>
                   )}
@@ -267,8 +267,8 @@ export function AICommandCenter({
             </div>
           </>
         ) : (
-          <div className="p-8 text-center text-slate-400 font-mono text-xs">
-            Select a row from the list to inspect transaction details.
+          <div className="p-8 text-center text-slate-500 font-mono text-xs">
+            Select a row from the ledger to inspect transaction forensic details.
           </div>
         )}
       </div>

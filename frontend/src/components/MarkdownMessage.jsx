@@ -16,24 +16,24 @@ export function MarkdownMessage({ content }) {
   const flushTable = (key) => {
     if (tableHeader.length > 0 || tableRows.length > 0) {
       elements.push(
-        <div key={`table-${key}`} className="my-3 overflow-x-auto rounded-lg border border-[#2F2F2F] bg-[#171717] shadow-md">
+        <div key={`table-${key}`} className="my-2.5 overflow-x-auto rounded border border-[#1E2638] bg-[#0E131E]">
           <table className="min-w-full text-xs text-left">
             {tableHeader.length > 0 && (
-              <thead className="bg-[#2F2F2F] text-slate-200 font-semibold border-b border-[#3A3A3A]">
+              <thead className="bg-[#141A27] text-slate-300 font-semibold border-b border-[#1E2638]">
                 <tr>
                   {tableHeader.map((th, i) => (
-                    <th key={i} className="px-3.5 py-2.5 whitespace-nowrap font-mono text-emerald-400">
+                    <th key={i} className="px-3 py-2 whitespace-nowrap font-mono text-emerald-400 text-[10px] uppercase">
                       {formatInlineText(th)}
                     </th>
                   ))}
                 </tr>
               </thead>
             )}
-            <tbody className="divide-y divide-[#2F2F2F] text-slate-200">
+            <tbody className="divide-y divide-[#1E2638] text-slate-200">
               {tableRows.map((row, rIdx) => (
-                <tr key={rIdx} className="hover:bg-[#3A3A3A]/40 transition-colors">
+                <tr key={rIdx} className="hover:bg-[#141A27] transition-colors">
                   {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="px-3.5 py-2 whitespace-nowrap font-sans">
+                    <td key={cIdx} className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">
                       {formatInlineText(cell)}
                     </td>
                   ))}
@@ -164,7 +164,7 @@ function formatInlineText(text) {
     } else if (token.startsWith('`') && token.endsWith('`')) {
       const codeContent = token.slice(1, -1);
       parts.push(
-        <code key={match.index} className="px-1.5 py-0.5 mx-0.5 rounded bg-[#2F2F2F] text-emerald-300 border border-[#3A3A3A] font-mono text-[11px]">
+        <code key={match.index} className="px-1.5 py-0.5 mx-0.5 rounded bg-[#141A27] text-emerald-300 border border-[#1E2638] font-mono text-[11px]">
           {codeContent}
         </code>
       );
