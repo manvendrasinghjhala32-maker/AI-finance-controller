@@ -24,26 +24,70 @@ import {
   Eye,
   History,
   ShieldCheck,
-  Layers
+  Layers,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [globalError, setGlobalError] = useState(null);
-  const [activeDatasetLabel, setActiveDatasetLabel] = useState('');
+  const [activeDatasetLabel, setActiveDatasetLabel] = useState(() => {
+    return localStorage.getItem('afc_dataset_label') || '';
+  });
+
+  // Dark / Light Mode Theme state with persistence
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('afc_theme') || 'light';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('afc_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
   
   // Navigation: 'overview' (default) | 'ledger' | 'benchmark' | 'forecast' | 'gl' | 'copilot'
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem('afc_active_tab');
+    return ['overview', 'ledger', 'benchmark', 'forecast', 'gl', 'changes'].includes(saved) ? saved : 'overview';
+  });
 
   // Selected Transaction for Exception Ledger Inspector
-  const [selectedTxId, setSelectedTxId] = useState(null);
-  const [activeLedgerFilter, setActiveLedgerFilter] = useState('EXCEPTIONS');
+  const [selectedTxId, setSelectedTxId] = useState(() => {
+    return localStorage.getItem('afc_selected_tx') || null;
+  });
+  const [activeLedgerFilter, setActiveLedgerFilter] = useState(() => {
+    return localStorage.getItem('afc_ledger_filter') || 'EXCEPTIONS';
+  });
 
-  // AI Chat Messages
-  const [chatMessages, setChatMessages] = useState([]);
+  // AI Chat Messages: stored in sessionStorage so that chat progress survives page refresh,
+  // but is discarded when the user closes the tab and reopens the application.
+  const [chatMessages, setChatMessages] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('afc_chat_messages');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      // Clean up legacy localStorage entry if present
+      localStorage.removeItem('afc_chat_messages');
+    } catch (e) {}
+    return [];
+  });
   const [chatLoading, setChatLoading] = useState(false);
-  const [chatWidgetOpen, setChatWidgetOpen] = useState(false);
+  const [chatWidgetOpen, setChatWidgetOpen] = useState(() => {
+    return sessionStorage.getItem('afc_chat_open') === 'true';
+  });
   const [focusedTxForChat, setFocusedTxForChat] = useState(null);
 
   // 1. Restore previous session on initial page load / refresh
@@ -78,7 +122,8 @@ export default function App() {
             if (firstExc) setSelectedTxId(firstExc.transaction_id);
           }
 
-          const savedChat = localStorage.getItem('afc_chat_messages');
+          // Restore AI chatbot progress from sessionStorage if present (e.g. on page refresh)
+          const savedChat = sessionStorage.getItem('afc_chat_messages');
           if (savedChat) {
             try {
               const parsed = JSON.parse(savedChat);
@@ -87,16 +132,22 @@ export default function App() {
               }
             } catch (e) {}
           }
+          // Note: If user closed the tab and reopened, sessionStorage is empty, so chatMessages remains []
+          // while all other progress (reconciled data, tab, filter, selected transaction) is fully restored!
         }
       } catch (err) {
         console.warn('Could not restore previous session:', err);
+      } finally {
+        if (isMounted) {
+          setCheckingSession(false);
+        }
       }
     }
     checkSession();
     return () => { isMounted = false; };
   }, []);
 
-  // 2. Sync UI states to localStorage
+  // 2. Sync UI states to localStorage (persistent across browser tab closes & restarts)
   useEffect(() => {
     if (activeTab) localStorage.setItem('afc_active_tab', activeTab);
   }, [activeTab]);
@@ -113,11 +164,18 @@ export default function App() {
     if (activeDatasetLabel) localStorage.setItem('afc_dataset_label', activeDatasetLabel);
   }, [activeDatasetLabel]);
 
+  // 3. Sync AI Chat state to sessionStorage (retained on page refresh, cleared on tab close)
   useEffect(() => {
     if (chatMessages && chatMessages.length > 0) {
-      localStorage.setItem('afc_chat_messages', JSON.stringify(chatMessages));
+      sessionStorage.setItem('afc_chat_messages', JSON.stringify(chatMessages));
+    } else {
+      sessionStorage.removeItem('afc_chat_messages');
     }
   }, [chatMessages]);
+
+  useEffect(() => {
+    sessionStorage.setItem('afc_chat_open', String(chatWidgetOpen));
+  }, [chatWidgetOpen]);
 
   // When files are uploaded from Landing
   const handleUploadSuccess = async (formData, tolerances) => {
@@ -224,6 +282,8 @@ export default function App() {
     localStorage.removeItem('afc_ledger_filter');
     localStorage.removeItem('afc_dataset_label');
     localStorage.removeItem('afc_chat_messages');
+    sessionStorage.removeItem('afc_chat_messages');
+    sessionStorage.removeItem('afc_chat_open');
     setData(null);
     setActiveDatasetLabel('');
     setChatMessages([]);
@@ -347,12 +407,12 @@ export default function App() {
     window.location.href = `/api/export/${reportType}`;
   };
 
-  // 1. Loading State: Show full animated loading screen between upload & main page
-  if (loading) {
-    return <LoadingScreen datasetName={activeDatasetLabel} />;
+  // 1. Loading State: Show animated loading screen between upload & main page or while restoring active session
+  if (loading || (checkingSession && (localStorage.getItem('afc_dataset_label') || activeDatasetLabel))) {
+    return <LoadingScreen datasetName={activeDatasetLabel || localStorage.getItem('afc_dataset_label') || 'Financial Session'} />;
   }
 
-  // 2. Initial State: If no data loaded yet, show Upload Landing
+  // 2. Initial State: If session check completed and no active session data, show Upload Landing
   if (!data || !data.records || data.records.length === 0) {
     return (
       <DocumentUploadLanding
@@ -360,6 +420,8 @@ export default function App() {
         onDemoLoad={handleDemoLoad}
         loading={loading}
         globalError={globalError}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
     );
   }
@@ -371,124 +433,198 @@ export default function App() {
   const resolvedCount = data.records.filter(r => r.is_resolved || r.resolution || r.resolution_action).length;
 
   const navItems = [
-    { id: 'overview', label: 'Executive Overview', icon: LayoutGrid },
-    { id: 'ledger', label: 'Variance Ledger', icon: AlertTriangle, badge: exceptionsCount },
-    { id: 'benchmark', label: 'Model Benchmark', icon: ShieldCheck, badge: data?.metrics ? `${data.metrics.accuracy.toFixed(0)}%` : undefined },
-    { id: 'forecast', label: '30-Day Liquidity', icon: TrendingUp },
-    { id: 'gl', label: 'General Ledger', icon: FileSpreadsheet },
+    { id: 'overview', label: 'Overview', icon: LayoutGrid },
+    { id: 'ledger', label: 'Differences & Issues', icon: AlertTriangle, badge: exceptionsCount },
+    { id: 'benchmark', label: 'Benchmark & Accuracy', icon: ShieldCheck, badge: data?.metrics ? `${data.metrics.accuracy.toFixed(0)}%` : undefined },
+    { id: 'forecast', label: 'Cash Forecast', icon: TrendingUp },
+    { id: 'gl', label: 'Accounting Records', icon: FileSpreadsheet },
+    { id: 'changes', label: 'Audit & Changes', icon: History, badge: resolvedCount > 0 ? resolvedCount : undefined },
   ];
 
+  const pageHeaders = {
+    overview: {
+      title: 'Reconciliation Overview',
+      subtitle: 'Real-time ledger matching, variance forensics, and resolution health',
+    },
+    ledger: {
+      title: 'Differences & Issues Ledger',
+      subtitle: 'Operational queue of price variances, timing drift, and unbilled disbursements',
+    },
+    benchmark: {
+      title: 'Benchmark & Accuracy',
+      subtitle: 'Independent empirical validation against ground-truth dataset',
+    },
+    forecast: {
+      title: '30-Day Cash Forecast',
+      subtitle: 'Scenario-based cash position modeling and daily settlement schedule',
+    },
+    gl: {
+      title: 'Accounting Records (GL)',
+      subtitle: 'Double-entry journal vouchers with automated trial balance audit',
+    },
+    changes: {
+      title: 'Audit Trail & Applied Changes',
+      subtitle: 'Reversible before-and-after resolution ledger with compliance trace',
+    },
+  };
+
+  const currentPage = pageHeaders[activeTab] || pageHeaders.overview;
+
   return (
-    <div className="min-h-screen bg-[#0A0D14] text-slate-100 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-300">
-      {/* Executive Global Header */}
-      <header className="sticky top-0 z-40 bg-[#0D111A]/95 backdrop-blur-md border-b border-[#1E2638] px-6 py-2.5 shadow-sm select-none">
-        <div className="max-w-[1700px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-3">
-          {/* Brand & Dataset Indicator */}
-          <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-start">
+    <div className="min-h-screen bg-[#F7F8FA] text-[#1A1F36] flex font-sans selection:bg-blue-100 selection:text-blue-900 transition-colors duration-200">
+      {/* 1. Left Navigation Sidebar */}
+      <aside className="w-64 bg-white border-r border-[#E5E7EB] flex flex-col justify-between shrink-0 z-30 min-h-screen sticky top-0 h-screen select-none transition-colors duration-200">
+        <div>
+          {/* Brand Header */}
+          <div className="p-5 border-b border-[#E5E7EB]">
             <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-[#141A27] border border-[#263147] flex items-center justify-center text-emerald-400 font-mono font-bold text-xs">
+              <div className="w-8 h-8 rounded-lg bg-[#0C2340] flex items-center justify-center text-white font-mono font-bold text-xs shadow-xs">
                 FC
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xs font-bold text-white tracking-wider uppercase font-mono">
-                    Financial Controller
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-xs font-bold text-[#1A1F36] tracking-tight uppercase font-mono truncate">
+                    Finance Controller
                   </h1>
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                    AUTONOMOUS CORE
-                  </span>
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono truncate max-w-[280px]">
-                  {activeDatasetLabel || 'Active Session Records'}
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A]"></span>
+                  <span className="text-[11px] text-[#6B7280] font-sans">Autonomous Core</span>
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {(summary.records_per_second || data.records_per_second) && (
-                <span 
-                  className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-slate-300 bg-[#141A27] px-2.5 py-0.5 rounded border border-[#1E2638]"
-                  title={`Engine Throughput: ${Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} records/sec in ${(summary.elapsed_seconds || data.elapsed_seconds || 0).toFixed(3)}s`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  <span>{Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} rec/s</span>
-                </span>
-              )}
             </div>
           </div>
 
-          {/* Navigation Segmented Control */}
-          <nav className="flex items-center gap-1 overflow-x-auto max-w-full py-0.5">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                    isActive
-                      ? 'bg-[#182030] text-white border border-[#2B374E] shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-[#131926]'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                  {item.badge !== undefined && item.badge > 0 && (
-                    <span className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${isActive ? 'bg-[#222E44] text-emerald-300' : 'bg-[#182030] text-amber-300 border border-amber-500/20'}`}>
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Navigation Section */}
+          <div className="px-3 py-4 space-y-1">
+            <div className="px-3 pb-2 text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider font-mono">
+              FINANCIAL OPERATIONS
+            </div>
 
-            {/* Dedicated Audit Trail / View Changes Tab Button */}
-            {resolvedCount > 0 && (
-              <button
-                onClick={() => setActiveTab('changes')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap border ${
-                  activeTab === 'changes'
-                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 shadow-sm'
-                    : 'bg-[#141A27] text-emerald-400 border-emerald-500/30 hover:bg-[#1A2234]'
-                }`}
-                title="View compliance audit trail of all applied adjustments"
-              >
-                <Eye className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Audit Trail</span>
-                <span className="px-1.5 py-0.2 rounded bg-emerald-900/60 text-emerald-300 text-[10px] font-mono border border-emerald-700/40">
-                  {resolvedCount}
+            <nav className="space-y-0.5">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-[#EFF6FF] text-[#1D4ED8] font-semibold border border-blue-100 shadow-xs'
+                        : 'text-[#4B5563] hover:text-[#1A1F36] hover:bg-gray-50 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#2563EB]' : 'text-[#6B7280]'}`} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+
+                    {item.badge !== undefined && (
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-medium ${
+                          isActive
+                            ? 'bg-blue-100 dark:bg-blue-900/40 text-[#1D4ED8] dark:text-blue-300'
+                            : item.id === 'ledger'
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40'
+                              : 'bg-gray-100 dark:bg-[#1E2638] text-[#4B5563] dark:text-[#CBD5E1]'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+
+        {/* Sidebar Footer Engine Card & Theme Switcher */}
+        <div className="p-4 border-t border-[#E5E7EB] bg-[#FAFAFC] space-y-2.5 transition-colors duration-200">
+          <div className="bg-white border border-[#E5E7EB] rounded-lg p-3 space-y-2 shadow-xs transition-colors duration-200">
+            <div className="flex items-center justify-between text-[11px] font-mono">
+              <span className="text-[#6B7280] font-sans">Engine Status</span>
+              <span className="inline-flex items-center gap-1 text-[#16A34A] font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse"></span>
+                ACTIVE
+              </span>
+            </div>
+
+            {(summary.records_per_second || data.records_per_second) && (
+              <div className="text-[11px] font-mono text-[#1A1F36] pt-1 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-[#6B7280] font-sans">Throughput</span>
+                <span className="font-semibold text-[#0C2340]">
+                  {Math.round(summary.records_per_second || data.records_per_second).toLocaleString()} rec/s
                 </span>
-              </button>
+              </div>
             )}
-          </nav>
 
-          {/* Right Action Utilities */}
-          <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+            <div className="text-[10px] text-[#6B7280] truncate font-mono pt-0.5">
+              {activeDatasetLabel || '160 Benchmark Records'}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* 2. Main Content & Top Header Column */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="sticky top-0 z-20 bg-white border-b border-[#E5E7EB] px-8 py-3.5 flex items-center justify-between shadow-xs select-none transition-colors duration-200">
+          <div>
+            <h2 className="text-sm font-bold text-[#1A1F36] tracking-tight font-sans">
+              {currentPage.title}
+            </h2>
+            <p className="text-xs text-[#6B7280] font-sans mt-0.5">
+              {currentPage.subtitle}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              className="px-3 py-1.5 rounded-lg bg-white hover:bg-gray-50 text-[#374151] hover:text-[#1A1F36] text-xs font-medium flex items-center gap-1.5 border border-[#D1D5DB] transition-all shadow-xs cursor-pointer"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label="Toggle dark mode"
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="font-sans">Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-[#6B7280]" />
+                  <span className="font-sans">Dark</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={() => handleExport('reconciliation')}
-              className="px-3 py-1.5 rounded-lg bg-[#141A27] hover:bg-[#1B2335] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1.5 border border-[#1E2638] transition-colors"
+              className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-gray-50 text-[#374151] hover:text-[#1A1F36] text-xs font-medium flex items-center gap-1.5 border border-[#D1D5DB] transition-all shadow-xs cursor-pointer"
               title="Download Full Reconciliation Report"
             >
-              <Download className="w-3.5 h-3.5 text-slate-400" />
+              <Download className="w-3.5 h-3.5 text-[#6B7280]" />
               <span>Export CSV</span>
             </button>
+
             <button
               onClick={handleReset}
-              className="px-3 py-1.5 rounded-lg bg-[#141A27] hover:bg-[#1B2335] text-emerald-400 hover:text-emerald-300 text-xs font-medium flex items-center gap-1.5 border border-emerald-500/30 transition-colors shadow-sm"
+              className="px-3.5 py-1.5 rounded-lg bg-[#0C2340] hover:bg-[#162E50] text-white text-xs font-medium flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
               title="Ingest new financial documents"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Ingest New Data</span>
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Tab Content with Smooth Fade-In Animation */}
-      <main key={activeTab} className="flex-1 p-6 max-w-[1700px] w-full mx-auto animate-fade-in">
-        {/* TAB 1: OVERVIEW & CHAT */}
-        {activeTab === 'overview' && (
+        {/* Main Tab Content */}
+        <main key={activeTab} className="flex-1 p-6 lg:p-8 max-w-[1600px] w-full mx-auto animate-fade-in">
+          {/* TAB 1: OVERVIEW & CHAT */}
+          {activeTab === 'overview' && (
           <ReconciliationOverviewAndChat
             data={data}
             onReset={handleReset}
@@ -556,6 +692,7 @@ export default function App() {
           />
         )}
       </main>
+      </div>
 
       {/* Floating Corner AI Chat Widget */}
       <FloatingAIChatWidget

@@ -303,7 +303,9 @@ def load_demo_dataset():
     store.resolved_overrides.clear()
     store.explanations = None
     store.executive_summary = None
+    store.dataset_label = "Benchmark Dataset (160 Multi-Source Records)"
     run_pipeline(skip_llm=True)
+    save_session_cache()
     return get_dashboard_data()
 
 

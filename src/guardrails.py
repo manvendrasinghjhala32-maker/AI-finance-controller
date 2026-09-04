@@ -60,7 +60,9 @@ class FinancialGuardrailEngine:
         # Audit, risk & benchmark
         r"\b(?:audit\w*|risk\w*|materiality\w*|fraud\w*|benchmark\w*|accuracy\w*|ground\s*truth\w*)\b",
         r"\b(?:overview\w*|summary\w*|dataset\w*|metric\w*|export\w*|report\w*|revert\w*|resolve\w*)\b",
-        r"\b(?:counterparty\w*|vendor\w*|customer\w*|client\w*|merchant\w*)\b",
+        r"\b(?:counterparty\w*|vendor\w*|customer\w*|client\w*|merchant\w*|supplier\w*|partner\w*)\b",
+        # CFO & strategic advisory terms
+        r"\b(?:cfo\w*|controller\w*|perform\w*|health\w*|action\w*|recommend\w*|advice\w*|strategy\w*|optimize\w*|insight\w*|trend\w*|workflow\w*)\b",
         # Currency amounts
         r"(?:₹|\$|rs\.?|inr|usd)\s*[\d,]+",
     ]
@@ -130,17 +132,29 @@ class FinancialGuardrailEngine:
                     found_records.append(rec)
                     resolution_source = "query_invoice"
 
-        # 2. If nothing directly in query, check focused_tx_id (from UI selection)
-        if not found_records and focused_tx_id:
+        # Check if query is an explicit batch/aggregate query that should NOT attach a single focused transaction
+        batch_terms = [
+            "list all", "show all", "all the", "all date", "date difference", "date differences",
+            "date mismatch", "date mismatches", "date drift", "amount mismatch", "amount mismatches",
+            "amount difference", "amount differences", "all variances", "missing invoice", "missing invoices",
+            "unbilled", "all duplicate", "all duplicates", "all exception", "all exceptions",
+            "all transaction", "all transactions", "overall", "total summary", "batch overview", "portfolio"
+        ]
+        is_explicit_batch_query = any(bt in q_lower for bt in batch_terms) and not any(
+            str(r.get("transaction_id", "")).upper() in q_upper for r in all_records if r.get("transaction_id")
+        )
+
+        # 2. If not an explicit batch query and nothing directly in query, check focused_tx_id (from UI selection)
+        if not found_records and not is_explicit_batch_query and focused_tx_id:
             rec = find_record_by_id(focused_tx_id)
             if rec:
                 referenced_ids.add(rec["transaction_id"])
                 found_records.append(rec)
                 resolution_source = "ui_focus"
 
-        # 3. If still nothing, check history for anaphoric follow-up references ("it", "this transaction", "why", "how to fix")
+        # 3. If still nothing and not an explicit batch query, check history for anaphoric follow-up references
         follow_up_tokens = ["this", "that", "it", "the transaction", "the fee", "the variance", "the vendor", "fix it", "why", "what happened", "how to resolve", "journal entry"]
-        is_follow_up = any(tok in q_lower for tok in follow_up_tokens) or len(query.split()) <= 6
+        is_follow_up = (any(tok in q_lower for tok in follow_up_tokens) or len(query.split()) <= 4) and not is_explicit_batch_query
 
         if not found_records and is_follow_up and history:
             # Scan history backwards from most recent turn
@@ -162,9 +176,11 @@ class FinancialGuardrailEngine:
         matched_vendors = []
         for r in all_records:
             vendor = str(r.get("vendor", "") or r.get("counterparty", "") or "").strip()
-            if vendor and len(vendor) >= 3 and vendor.lower() in q_lower:
-                if vendor not in matched_vendors:
-                    matched_vendors.append(vendor)
+            if vendor and len(vendor) >= 3:
+                v_lower = vendor.lower()
+                if v_lower in q_lower or any(tok in q_lower for tok in v_lower.split() if len(tok) >= 4):
+                    if vendor not in matched_vendors:
+                        matched_vendors.append(vendor)
 
         return {
             "referenced_tx_ids": list(referenced_ids),
@@ -234,8 +250,9 @@ class FinancialGuardrailEngine:
         # 3. Check for vendor or counterparty names in the loaded dataset
         for r in all_records:
             vendor = str(r.get("vendor", "")).strip().lower()
-            if vendor and len(vendor) >= 3 and vendor in q_lower:
-                return True, None
+            if vendor and len(vendor) >= 3:
+                if vendor in q_lower or any(tok in q_lower for tok in vendor.split() if len(tok) >= 4):
+                    return True, None
 
         # 4. Check for financial domain patterns
         for pat in FinancialGuardrailEngine.FINANCIAL_DOMAIN_PATTERNS:

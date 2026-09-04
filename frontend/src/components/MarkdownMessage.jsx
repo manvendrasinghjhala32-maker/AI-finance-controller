@@ -16,22 +16,22 @@ export function MarkdownMessage({ content }) {
   const flushTable = (key) => {
     if (tableHeader.length > 0 || tableRows.length > 0) {
       elements.push(
-        <div key={`table-${key}`} className="my-2.5 overflow-x-auto rounded border border-[#1E2638] bg-[#0E131E]">
+        <div key={`table-${key}`} className="my-2.5 overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-xs">
           <table className="min-w-full text-xs text-left">
             {tableHeader.length > 0 && (
-              <thead className="bg-[#141A27] text-slate-300 font-semibold border-b border-[#1E2638]">
+              <thead className="bg-gray-50 text-gray-600 font-semibold border-b border-gray-200">
                 <tr>
                   {tableHeader.map((th, i) => (
-                    <th key={i} className="px-3 py-2 whitespace-nowrap font-mono text-emerald-400 text-[10px] uppercase">
+                    <th key={i} className="px-3 py-2 whitespace-nowrap font-mono text-gray-700 text-[10px] uppercase">
                       {formatInlineText(th)}
                     </th>
                   ))}
                 </tr>
               </thead>
             )}
-            <tbody className="divide-y divide-[#1E2638] text-slate-200">
+            <tbody className="divide-y divide-gray-200 text-gray-800">
               {tableRows.map((row, rIdx) => (
-                <tr key={rIdx} className="hover:bg-[#141A27] transition-colors">
+                <tr key={rIdx} className="hover:bg-gray-50/80 transition-colors">
                   {row.map((cell, cIdx) => (
                     <td key={cIdx} className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">
                       {formatInlineText(cell)}
@@ -75,19 +75,19 @@ export function MarkdownMessage({ content }) {
     // Headers
     if (trimmed.startsWith('### ')) {
       elements.push(
-        <h3 key={idx} className="text-sm font-bold text-emerald-400 mt-3 mb-1.5 flex items-center gap-1.5 border-b border-[#2F2F2F] pb-1 font-mono">
+        <h3 key={idx} className="text-sm font-bold text-[#1A1F36] mt-3 mb-1.5 flex items-center gap-1.5 border-b border-gray-200 pb-1 font-sans">
           {formatInlineText(trimmed.replace('### ', ''))}
         </h3>
       );
     } else if (trimmed.startsWith('## ')) {
       elements.push(
-        <h2 key={idx} className="text-base font-extrabold text-white mt-4 mb-2">
+        <h2 key={idx} className="text-base font-bold text-[#1A1F36] mt-4 mb-2">
           {formatInlineText(trimmed.replace('## ', ''))}
         </h2>
       );
     } else if (trimmed.startsWith('# ')) {
       elements.push(
-        <h1 key={idx} className="text-lg font-black text-white mt-4 mb-2">
+        <h1 key={idx} className="text-lg font-bold text-[#1A1F36] mt-4 mb-2">
           {formatInlineText(trimmed.replace('# ', ''))}
         </h1>
       );
@@ -96,8 +96,8 @@ export function MarkdownMessage({ content }) {
     else if (trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
       const bulletText = trimmed.replace(/^[-•*]\s+/, '');
       elements.push(
-        <div key={idx} className="flex items-start gap-2 my-1 text-xs sm:text-sm text-slate-200 leading-relaxed pl-1">
-          <span className="text-emerald-400 font-bold mt-0.5">•</span>
+        <div key={idx} className="flex items-start gap-2 my-1 text-xs sm:text-sm text-gray-700 leading-relaxed pl-1">
+          <span className="text-[#2563EB] font-bold mt-0.5">•</span>
           <span className="flex-1">{formatInlineText(bulletText)}</span>
         </div>
       );
@@ -107,8 +107,8 @@ export function MarkdownMessage({ content }) {
       const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
       if (numMatch) {
         elements.push(
-          <div key={idx} className="flex items-start gap-2 my-1.5 text-xs sm:text-sm text-slate-200 leading-relaxed pl-1">
-            <span className="w-5 h-5 rounded-full bg-[#2F2F2F] text-emerald-400 border border-emerald-500/40 flex-shrink-0 flex items-center justify-center font-mono text-[11px] font-bold mt-0.5">
+          <div key={idx} className="flex items-start gap-2 my-1.5 text-xs sm:text-sm text-gray-700 leading-relaxed pl-1">
+            <span className="w-5 h-5 rounded-full bg-blue-50 text-[#1D4ED8] border border-blue-200 flex-shrink-0 flex items-center justify-center font-mono text-[11px] font-bold mt-0.5">
               {numMatch[1]}
             </span>
             <span className="flex-1">{formatInlineText(numMatch[2])}</span>
@@ -123,7 +123,7 @@ export function MarkdownMessage({ content }) {
     // Normal paragraph
     else {
       elements.push(
-        <p key={idx} className="my-1 text-xs sm:text-sm text-slate-200 leading-relaxed">
+        <p key={idx} className="my-1 text-xs sm:text-sm text-gray-700 leading-relaxed">
           {formatInlineText(trimmed)}
         </p>
       );
@@ -157,14 +157,14 @@ function formatInlineText(text) {
     if (token.startsWith('**') && token.endsWith('**')) {
       const boldContent = token.slice(2, -2);
       parts.push(
-        <strong key={match.index} className="font-bold text-white tracking-wide">
+        <strong key={match.index} className="font-bold text-[#1A1F36]">
           {boldContent}
         </strong>
       );
     } else if (token.startsWith('`') && token.endsWith('`')) {
       const codeContent = token.slice(1, -1);
       parts.push(
-        <code key={match.index} className="px-1.5 py-0.5 mx-0.5 rounded bg-[#141A27] text-emerald-300 border border-[#1E2638] font-mono text-[11px]">
+        <code key={match.index} className="px-1.5 py-0.5 mx-0.5 rounded bg-gray-100 text-[#1D4ED8] border border-gray-200 font-mono text-[11px]">
           {codeContent}
         </code>
       );
