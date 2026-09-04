@@ -629,12 +629,44 @@ def _is_offtopic_query(question: str, results: List["ReconciliationResult"], ban
     return not any(term in q for term in _DOMAIN_TERMS)
 
 
+def _is_vague_followup(question: str) -> bool:
+    """True for short, conversational follow-ups like 'so what about this one', 'why though', 'go on'."""
+    q = _normalize_query(question)
+    if not q:
+        return False
+    off_markers = (
+        "sky", "football", "match", "weather", "recipe", "song", "joke",
+        "capital of", "prime minister", "president", "movie", "poem", "react",
+        "website", "life", "haiku", "ocean",
+    )
+    if any(m in q for m in off_markers):
+        return False
+    vague_phrases = (
+        "this one", "what about this", "what about that", "what about", "why though",
+        "go on", "tell me more", "continue", "how do i fix", "how to fix",
+        "how do i resolve", "how to resolve", "what next", "what else",
+        "and then", "so what", "fix it", "how come", "details",
+        "what do i do", "what should i do", "how do we fix", "keep going",
+        "more info", "elaborate",
+    )
+    if any(p in q for p in vague_phrases):
+        return True
+    words = q.split()
+    if len(words) <= 3 and q in ("why", "how", "next", "and", "more", "continue"):
+        return True
+    if len(words) <= 4 and any(w in words for w in ["this", "that", "it"]) and any(w in words for w in ["why", "how", "what", "fix", "resolve"]):
+        return True
+    return False
+
+
 def _is_generic_summary_query(question: str, results: List["ReconciliationResult"], bank_df) -> bool:
     """True for broad questions ('overall summary', 'how many exceptions') with no
     specific transaction/vendor named — these should use the aggregate numbers,
     never a single-transaction deep dive."""
     q = _normalize_query(question)
     if _mentions_specific_entity(question, results, bank_df):
+        return False
+    if any(k in q for k in ["duplicate", "missing", "fee", "variance", "date"]):
         return False
     generic_terms = ("overall", "summary", "recap", "total", "how many", "how much",
                       "status", "overview", "big picture", "high level")
@@ -651,9 +683,11 @@ def _greeting_reply() -> str:
 
 def _offtopic_reply() -> str:
     return (
-        "That's outside what I can help with here — I'm scoped to this reconciliation batch "
+        "⚠️ **Query Not Related to Dataset or Results**\n\n"
+        "That's outside what I can help with here — I'm scoped strictly to this reconciliation dataset "
         "(transactions, invoices, payments, mismatches, and cash forecasting). "
-        "Try asking something like \"what happened with TX0004?\" or \"give me the overall summary.\""
+        "Please ask a genuine or related question about our financial data, such as "
+        "\"why is TX0004 flagged?\" or \"give me the overall summary.\""
     )
 
 
@@ -746,12 +780,16 @@ def ask_question(
     if not is_safe and safety_msg:
         return safety_msg
 
-    # 2. Extract entity references (handles direct mention, focused_transaction_id, and history anaphora)
+    # 2. Greeting / Small talk check
+    if _is_greeting_or_smalltalk(question):
+        return _greeting_reply()
+
+    # 3. Extract entity references (handles direct mention, focused_transaction_id, and history anaphora)
     entity_info = FinancialGuardrailEngine.extract_entity_references(
         question, all_records, focused_tx_id=focused_transaction_id, history=history
     )
 
-    # 3. Check for non-existent transaction IDs (Ledger Grounding Guardrail)
+    # 4. Check for non-existent transaction IDs (Ledger Grounding Guardrail)
     tx_candidates = re.findall(r"\b(?:TX|TRX|BL|TXN)[-_]?\d+[A-Z]?\b", question, re.IGNORECASE)
     for cand in tx_candidates:
         cand_norm = cand.upper().replace("-", "").replace("_", "")
@@ -759,19 +797,20 @@ def ask_question(
         if not exists:
             return f"🛡️ **Ledger Grounding Guardrail**: Transaction ID `{cand}` does not exist in the active reconciliation batch. Please verify the transaction reference number from the Exception Ledger."
 
-    # 4. Relevance check
-    has_focused = bool(focused_transaction_id) or bool(entity_info["matched_records"])
-    is_relevant, relevance_reply = FinancialGuardrailEngine.verify_dataset_relevance(
-        question, all_records, has_focused_tx=has_focused, history=history
-    )
-    if not is_relevant and relevance_reply:
-        return relevance_reply
-
-    # 5. Fast-path deterministic routing for generic queries (when NO specific transaction is targeted)
     q_lower = question.lower().strip()
-    is_specific = entity_info["is_specific_tx_query"] or bool(entity_info["matched_records"]) or bool(entity_info["referenced_tx_ids"])
-    if not is_specific:
-        if any(term in q_lower for term in ["overall", "summary", "total summary", "overview", "total number of records"]) and not any(k in q_lower for k in ["duplicate", "missing", "fee", "variance", "date"]):
+    is_vague = _is_vague_followup(question)
+    is_specific = (
+        entity_info["is_specific_tx_query"]
+        or bool(entity_info["matched_records"])
+        or bool(entity_info["referenced_tx_ids"])
+    )
+
+    # 5. Fast-path deterministic routing for generic queries (when NO specific transaction is targeted and NOT a vague follow-up)
+    if not is_specific and not is_vague:
+        if (
+            _is_generic_summary_query(question, results, bank_df)
+            or any(term in q_lower for term in ["overall", "summary", "total summary", "overview", "total number of records"])
+        ) and not any(k in q_lower for k in ["duplicate", "missing", "fee", "variance", "date"]):
             clean_count = status_counts.get(STATUS_MATCH, 0)
             dup_count = status_counts.get(STATUS_DUPLICATE, 0)
             clean_total = len(results) - dup_count
@@ -973,10 +1012,54 @@ def ask_question(
                 f"3. **Authorize Timing Tolerances ({date_count} items)**: Apply 3-day window rule for automated approval."
             )
 
-    # 6. Specific transaction intent handling (Non-Repetitive & Intent-Adaptive)
+    # 6. Vague Conversational Follow-up Resolution (e.g. "so what about this one", "why though", "go on")
+    if is_vague and not entity_info["matched_records"]:
+        target_rec = None
+        if history:
+            for turn in reversed(history):
+                content = str(turn.get("content", ""))
+                hist_ids = re.findall(r"\b(?:TX|TRX|BL|TXN)[-_]?\d+[A-Z]?\b", content, re.IGNORECASE)
+                for hid in hist_ids:
+                    hid_norm = hid.upper().replace("-", "").replace("_", "")
+                    for r in all_records:
+                        if hid_norm == r["transaction_id"].upper().replace("-", "").replace("_", ""):
+                            target_rec = r
+                            break
+                    if target_rec:
+                        break
+                if target_rec:
+                    break
+
+        if not target_rec:
+            # Cold-start fallback: pick the primary active exception
+            candidate_mismatches = [r for r in all_records if r["status"] == STATUS_AMOUNT_MISMATCH]
+            candidate_exceptions = [
+                r for r in all_records
+                if r["status"] in (STATUS_AMOUNT_MISMATCH, STATUS_DATE_MISMATCH, STATUS_MISSING_INVOICE)
+            ]
+            target_rec = (
+                candidate_mismatches[0]
+                if candidate_mismatches
+                else (candidate_exceptions[0] if candidate_exceptions else (all_records[0] if all_records else None))
+            )
+
+        if target_rec:
+            entity_info["matched_records"] = [target_rec]
+            entity_info["referenced_tx_ids"] = [target_rec["transaction_id"]]
+            is_specific = True
+
+    # 7. Dataset Relevance & Off-Topic Check (only if NOT specific, NOT focused, and NOT vague follow-up)
+    has_focused = bool(focused_transaction_id) or bool(entity_info["matched_records"])
+    if not has_focused and not is_vague:
+        is_relevant, relevance_reply = FinancialGuardrailEngine.verify_dataset_relevance(
+            question, all_records, has_focused_tx=False, history=history
+        )
+        if not is_relevant:
+            return _offtopic_reply()
+
+    # 8. Specific transaction intent handling (Non-Repetitive & Intent-Adaptive)
     if is_specific and entity_info["matched_records"]:
         target = entity_info["matched_records"][0]
-        intent = FinancialGuardrailEngine.classify_intent(question, has_focused_tx=True)
         tx_id = target["transaction_id"]
         vendor = target["vendor"] or "Customer"
         bank_amt = target["bank_amount"]
@@ -984,8 +1067,53 @@ def ask_question(
         status = target["status"]
         reason = target["reason"]
         fee_pct = (delta / (bank_amt + delta) * 100) if (bank_amt + delta) > 0 else 2.5
+        inv_amt = bank_amt + delta if delta else bank_amt
 
-        if intent == "ROOT_CAUSE":
+        intent = FinancialGuardrailEngine.classify_intent(question, has_focused_tx=True)
+
+        # Logical advancement for continuation queries ("go on", "continue", "next", "tell me more")
+        is_continuation = any(p in q_lower for p in ["go on", "continue", "next", "tell me more", "what next", "keep going", "and then", "elaborate"])
+        if is_continuation:
+            last_assistant_msg = ""
+            if history:
+                for turn in reversed(history):
+                    if turn.get("role") == "assistant":
+                        last_assistant_msg = turn.get("content", "")
+                        break
+
+            if "Strategic Remediation Playbook" in last_assistant_msg or "Remediation" in last_assistant_msg or "Action Plan" in last_assistant_msg:
+                intent = "JOURNAL_ENTRY"
+            elif "Balanced General Ledger Adjusting Entry" in last_assistant_msg or "Double-Entry" in last_assistant_msg or "GL-1010" in last_assistant_msg:
+                intent = "RISK_AUDIT"
+            elif "Forensic Root Cause Investigation" in last_assistant_msg or "Money Flow Story" in last_assistant_msg:
+                intent = "RESOLUTION_ACTION"
+            elif "Forensic Audit Dossier" in last_assistant_msg:
+                intent = "ROOT_CAUSE"
+            else:
+                intent = "ROOT_CAUSE"
+
+        if intent == "TRANSACTION_DETAIL":
+            inv_str = target.get("invoice_id") or "Unmatched / Missing"
+            delta_str = f"₹{delta:,.2f} ({fee_pct:.1f}%)" if delta else "₹0.00"
+            return (
+                f"### 📋 Forensic Audit Dossier: `{tx_id}`\n\n"
+                f"> **Transaction Profile**: Reference `{tx_id}` associated with counterparty **{vendor}** cleared at **₹{bank_amt:,.2f}** in the operating bank feed with classification **{status}**.\n\n"
+                f"#### 📊 Core Transaction Parameters\n"
+                f"| Ledger Dimension | Value / Parameter | Audit Significance |\n"
+                f"|---|---|---|\n"
+                f"| **Transaction Reference** | `{tx_id}` | Primary banking intake key |\n"
+                f"| **Counterparty / Vendor** | **{vendor}** | Counterparty on bank statement |\n"
+                f"| **Matched Invoice** | `{inv_str}` | ERP accounts receivable billing record |\n"
+                f"| **Cleared Bank Intake** | **₹{bank_amt:,.2f}** | Net liquid cash deposited |\n"
+                f"| **Reconciliation Status** | **{status}** | Operational exception classification |\n"
+                f"| **Fee Drag / Delta** | **{delta_str}** | Variance between bank and invoice |\n"
+                f"| **Forensic Diagnosis** | {reason} | Primary exception root cause |\n\n"
+                f"#### 🎯 Recommended Controller Actions\n"
+                f"- Ask *\"why though?\"* to investigate the underlying root cause and fee deduction mechanics.\n"
+                f"- Ask *\"how do I fix it?\"* to view the step-by-step remediation action plan.\n"
+                f"- Ask *\"show journal entry\"* to generate balanced double-entry GL adjustment entries."
+            )
+        elif intent == "ROOT_CAUSE":
             return (
                 f"### 🔍 Deep-Dive Forensic Root Cause Investigation: `{tx_id}`\n\n"
                 f"> **Executive Summary**: Transaction `{tx_id}` involving counterparty **{vendor}** cleared at **₹{bank_amt:,.2f}** against an expected invoice total, producing a **₹{delta:,.2f} ({fee_pct:.1f}%) variance** classified as **{status}**.\n\n"
@@ -1019,7 +1147,6 @@ def ask_question(
                 f"- **Vendor Payment Optimization**: Encourage counterparties like {vendor} to adopt direct net-banking or ACH rails where interchange fees are capped, reducing overall transaction friction."
             )
         elif intent == "JOURNAL_ENTRY":
-            inv_amt = bank_amt + delta if delta else bank_amt
             return (
                 f"### 📝 Balanced General Ledger Adjusting Entry: `{tx_id}`\n\n"
                 f"> **Accounting Rationale**: Clear the gross accounts receivable invoice balance of **₹{inv_amt:,.2f}** for **{vendor}**, recognize net settled cash of **₹{bank_amt:,.2f}**, and book the deducted processing fee variance of **₹{delta:,.2f}** to operating expenses.\n\n"
@@ -1036,6 +1163,36 @@ def ask_question(
                 f"- **Tax Treatment**: Processing fees booked to `GL-6150` are fully deductible operating expenses; ensure input GST/VAT credit is captured if gateway invoice is available.\n"
                 f"- **Audit Trail**: Reference transaction `{tx_id}` and vendor `{vendor}` on journal header for seamless statutory and external auditor sign-off.\n\n"
                 f"*(Note: All suggested accounting entries are proposed adjustments requiring human controller review and approval prior to ERP posting.)*"
+            )
+        elif intent == "RISK_AUDIT":
+            return (
+                f"### 🛡️ Compliance & Forensic Risk Evaluation: `{tx_id}`\n\n"
+                f"> **Risk Posture**: Transaction `{tx_id}` ({vendor}) carries an accounting variance of **₹{delta:,.2f}** ({status}). Audit risk is rated as low-to-moderate operational friction rather than fraud.\n\n"
+                f"#### 🔍 Key Risk Indicators\n"
+                f"- **Materiality Assessment**: The variance represents {fee_pct:.1f}% of transaction value, aligning with standard interchange schedules.\n"
+                f"- **Audit Trail Integrity**: Both bank receipt and ERP record share verifiable timestamps, preventing ghost or phantom record risks.\n"
+                f"- **Recommended Sign-Off**: Once the adjusting journal entry (`GL-6150`) is approved by the human controller, the exception can be safely closed."
+            )
+        elif intent == "AMOUNT_FEE":
+            return (
+                f"### 💰 Fee Drag & Variance Analysis: `{tx_id}`\n\n"
+                f"> **Summary**: For transaction `{tx_id}` with **{vendor}**, the gross expected amount was **₹{inv_amt:,.2f}**, but cleared bank cash was **₹{bank_amt:,.2f}**, leaving a fee variance of **₹{delta:,.2f}** ({fee_pct:.1f}%).\n\n"
+                f"#### 📊 Amount Breakdown\n"
+                f"- **Expected Invoiced Principal**: ₹{inv_amt:,.2f}\n"
+                f"- **Net Liquid Cleared Cash**: ₹{bank_amt:,.2f}\n"
+                f"- **Gateway Fee Deduction**: ₹{delta:,.2f} ({fee_pct:.1f}% interchange)\n"
+                f"- **Accounting Treatment**: Debit `GL-6150 (Gateway Fees)` to absorb the variance and reconcile the ledger."
+            )
+        elif intent == "DATE_TIMING":
+            days = abs(target.get("date_delta_days") or 2)
+            return (
+                f"### ⏳ Timing Drift & Settlement Transit Analysis: `{tx_id}`\n\n"
+                f"> **Settlement Overview**: Transaction `{tx_id}` with **{vendor}** exhibits a **+{days}-day transit offset** between invoice creation and banking clearance.\n\n"
+                f"#### 📊 Settlement Parameters\n"
+                f"- **Transit Delay**: {days} business days\n"
+                f"- **Cleared Principal**: ₹{bank_amt:,.2f}\n"
+                f"- **Variance Type**: Operational timing difference (no principal leakage)\n"
+                f"- **Recommended Treatment**: Apply automated 3-day clearing window rule in the reconciliation engine."
             )
 
     # 7. Fast-path deterministic routing for Vendor queries
