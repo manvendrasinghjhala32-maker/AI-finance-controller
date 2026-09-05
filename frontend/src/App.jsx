@@ -28,8 +28,7 @@ import {
   Moon
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
-
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
