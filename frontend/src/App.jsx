@@ -28,6 +28,8 @@ import {
   Moon
 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -74,7 +76,7 @@ export default function App() {
     let isMounted = true;
     async function checkSession() {
       try {
-        const res = await fetch('/api/session');
+        const res = await fetch(`${API_BASE}/api/session`);
         if (!res.ok) return;
         const json = await res.json();
         if (json.has_active_session && json.data && isMounted) {
@@ -135,7 +137,7 @@ export default function App() {
     setLoading(true);
     setGlobalError(null);
     try {
-      const uploadRes = await fetch('/api/upload', {
+      const uploadRes = await fetch(`${API_BASE}/api/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -173,7 +175,7 @@ export default function App() {
     setLoading(true);
     setGlobalError(null);
     try {
-      const res = await fetch('/api/load-demo', { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/load-demo`, { method: 'POST' });
       if (!res.ok) throw new Error('Failed to load demo dataset');
       const json = await res.json();
       // Smooth loading transition pause
@@ -197,7 +199,7 @@ export default function App() {
   // Reset to Upload Landing
   const handleReset = async () => {
     try {
-      await fetch('/api/reset', { method: 'POST' });
+      await fetch(`${API_BASE}/api/reset`, { method: 'POST' });
     } catch (e) {}
     localStorage.removeItem('afc_active_tab');
     localStorage.removeItem('afc_selected_tx');
@@ -212,7 +214,7 @@ export default function App() {
   // Handle Exception One-Click Resolution
   const handleResolveTransaction = async (txId, actionType, note = '') => {
     try {
-      const res = await fetch('/api/resolve', {
+      const res = await fetch(`${API_BASE}/api/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,7 +250,7 @@ export default function App() {
   // Revert / Undo transaction resolution
   const handleUnresolveTransaction = async (txId) => {
     try {
-      const res = await fetch('/api/unresolve', {
+      const res = await fetch(`${API_BASE}/api/unresolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transaction_id: txId }),
@@ -271,7 +273,7 @@ export default function App() {
 
   // Export CSV helper
   const handleExport = (reportType) => {
-    window.location.href = `/api/export/${reportType}`;
+    window.location.href = `${API_BASE}/api/export/${reportType}`;
   };
 
   // 1. Loading State: Show animated loading screen between upload & main page or while restoring active session
