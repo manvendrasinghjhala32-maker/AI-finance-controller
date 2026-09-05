@@ -13,6 +13,7 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
+import { API_BASE } from '../config';
 
 export function GLEntriesView({ onExport }) {
   const [entries, setEntries] = useState([]);
@@ -26,7 +27,7 @@ export function GLEntriesView({ onExport }) {
   const [expandedJournalId, setExpandedJournalId] = useState(null);
 
   useEffect(() => {
-    fetch('/api/gl-entries')
+    fetch(`${API_BASE}/api/gl-entries`)
       .then(res => res.json())
       .then(data => {
         setEntries(data || []);
@@ -49,7 +50,7 @@ export function GLEntriesView({ onExport }) {
     setJournalAiLoading(prev => ({ ...prev, [entryId]: true }));
     setJournalAiError(prev => ({ ...prev, [entryId]: null }));
     try {
-      const res = await fetch(`/api/ask/journal/${encodeURIComponent(entryId)}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/ask/journal/${encodeURIComponent(entryId)}`, { method: 'POST' });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.detail || `Server error (${res.status})`);

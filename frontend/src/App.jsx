@@ -8,6 +8,7 @@ import { GLEntriesView } from './components/GLEntriesView';
 import { AdjustmentsChangesView } from './components/AdjustmentsChangesView';
 import { BenchmarkEvaluationView } from './components/BenchmarkEvaluationView';
 import { LoadingScreen } from './components/LoadingScreen';
+import { API_BASE } from './config';
 
 import { 
   LayoutGrid, 
@@ -28,7 +29,6 @@ import {
   Moon
 } from 'lucide-react';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);

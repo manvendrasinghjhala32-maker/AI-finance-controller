@@ -10,6 +10,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
+import { API_BASE } from '../config';
 
 export function ForecastView({ onExport }) {
   const [forecast, setForecast] = useState([]);
@@ -21,7 +22,7 @@ export function ForecastView({ onExport }) {
   const [aiForecastError, setAiForecastError] = useState(null);
 
   useEffect(() => {
-    fetch('/api/forecast')
+    fetch(`${API_BASE}/api/forecast`)
       .then(res => res.json())
       .then(data => {
         setForecast(data || []);
@@ -39,7 +40,7 @@ export function ForecastView({ onExport }) {
     setAiForecastLoading(true);
     setAiForecastError(null);
     try {
-      const res = await fetch('/api/ask/forecast', { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/ask/forecast`, { method: 'POST' });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.detail || `Server error (${res.status})`);

@@ -12,6 +12,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
+import { API_BASE } from '../config';
 
 export function AICommandCenter({ 
   selectedTx, 
@@ -42,7 +43,7 @@ export function AICommandCenter({
     setAiLoading(true);
     setAiError(null);
     try {
-      const res = await fetch(`/api/ask/transaction/${encodeURIComponent(txId)}`, {
+      const res = await fetch(`${API_BASE}/api/ask/transaction/${encodeURIComponent(txId)}`, {
         method: 'POST',
       });
       if (!res.ok) {

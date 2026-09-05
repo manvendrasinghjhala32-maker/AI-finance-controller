@@ -22,6 +22,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
+import { API_BASE } from '../config';
 
 export function AdjustmentsChangesView({ 
   records = [], 
@@ -44,7 +45,7 @@ export function AdjustmentsChangesView({
     setAiLoading(prev => ({ ...prev, [txId]: true }));
     setAiError(prev => ({ ...prev, [txId]: null }));
     try {
-      const res = await fetch(`/api/ask/transaction/${encodeURIComponent(txId)}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/ask/transaction/${encodeURIComponent(txId)}`, { method: 'POST' });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.detail || `Server error (${res.status})`);

@@ -18,6 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
+import { API_BASE } from '../config';
 
 export function ReconciliationOverviewAndChat({ 
   data, 
@@ -44,7 +45,7 @@ export function ReconciliationOverviewAndChat({
     setSummaryAiLoading(true);
     setSummaryAiError(null);
     try {
-      const res = await fetch('/api/ask/summary', { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/ask/summary`, { method: 'POST' });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.detail || `Server error (${res.status})`);
@@ -64,7 +65,7 @@ export function ReconciliationOverviewAndChat({
     setTxAiLoading(prev => ({ ...prev, [txId]: true }));
     setTxAiError(prev => ({ ...prev, [txId]: null }));
     try {
-      const res = await fetch(`/api/ask/transaction/${encodeURIComponent(txId)}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/api/ask/transaction/${encodeURIComponent(txId)}`, { method: 'POST' });
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.detail || `Server error (${res.status})`);

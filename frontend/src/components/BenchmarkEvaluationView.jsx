@@ -21,6 +21,7 @@ import {
   X,
   Bot
 } from 'lucide-react';
+import { API_BASE } from '../config';
 
 export function BenchmarkEvaluationView({ data, onUploadSuccess }) {
   const [localData, setLocalData] = useState(null);
@@ -48,7 +49,7 @@ export function BenchmarkEvaluationView({ data, onUploadSuccess }) {
     setUploadError(null);
 
     try {
-      const res = await fetch('/api/upload/ground_truth', {
+      const res = await fetch(`${API_BASE}/api/upload/ground_truth`, {
         method: 'POST',
         body: formData,
       });
