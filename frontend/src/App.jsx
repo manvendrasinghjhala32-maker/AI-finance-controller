@@ -7,7 +7,6 @@ import { ForecastView } from './components/ForecastView';
 import { GLEntriesView } from './components/GLEntriesView';
 import { AdjustmentsChangesView } from './components/AdjustmentsChangesView';
 import { BenchmarkEvaluationView } from './components/BenchmarkEvaluationView';
-import { FloatingAIChatWidget } from './components/FloatingAIChatWidget';
 import { LoadingScreen } from './components/LoadingScreen';
 
 import { 
@@ -56,7 +55,7 @@ export default function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
   
-  // Navigation: 'overview' (default) | 'ledger' | 'benchmark' | 'forecast' | 'gl' | 'copilot'
+  // Navigation: 'overview' (default) | 'ledger' | 'benchmark' | 'forecast' | 'gl' | 'changes'
   const [activeTab, setActiveTab] = useState(() => {
     const saved = localStorage.getItem('afc_active_tab');
     return ['overview', 'ledger', 'benchmark', 'forecast', 'gl', 'changes'].includes(saved) ? saved : 'overview';
@@ -69,26 +68,6 @@ export default function App() {
   const [activeLedgerFilter, setActiveLedgerFilter] = useState(() => {
     return localStorage.getItem('afc_ledger_filter') || 'EXCEPTIONS';
   });
-
-  // AI Chat Messages: stored in sessionStorage so that chat progress survives page refresh,
-  // but is discarded when the user closes the tab and reopens the application.
-  const [chatMessages, setChatMessages] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem('afc_chat_messages');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      // Clean up legacy localStorage entry if present
-      localStorage.removeItem('afc_chat_messages');
-    } catch (e) {}
-    return [];
-  });
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatWidgetOpen, setChatWidgetOpen] = useState(() => {
-    return sessionStorage.getItem('afc_chat_open') === 'true';
-  });
-  const [focusedTxForChat, setFocusedTxForChat] = useState(null);
 
   // 1. Restore previous session on initial page load / refresh
   useEffect(() => {
@@ -121,19 +100,6 @@ export default function App() {
             const firstExc = json.data.records.find(r => !['MATCH', 'DUPLICATE'].includes(r.status));
             if (firstExc) setSelectedTxId(firstExc.transaction_id);
           }
-
-          // Restore AI chatbot progress from sessionStorage if present (e.g. on page refresh)
-          const savedChat = sessionStorage.getItem('afc_chat_messages');
-          if (savedChat) {
-            try {
-              const parsed = JSON.parse(savedChat);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                setChatMessages(parsed);
-              }
-            } catch (e) {}
-          }
-          // Note: If user closed the tab and reopened, sessionStorage is empty, so chatMessages remains []
-          // while all other progress (reconciled data, tab, filter, selected transaction) is fully restored!
         }
       } catch (err) {
         console.warn('Could not restore previous session:', err);
@@ -163,19 +129,6 @@ export default function App() {
   useEffect(() => {
     if (activeDatasetLabel) localStorage.setItem('afc_dataset_label', activeDatasetLabel);
   }, [activeDatasetLabel]);
-
-  // 3. Sync AI Chat state to sessionStorage (retained on page refresh, cleared on tab close)
-  useEffect(() => {
-    if (chatMessages && chatMessages.length > 0) {
-      sessionStorage.setItem('afc_chat_messages', JSON.stringify(chatMessages));
-    } else {
-      sessionStorage.removeItem('afc_chat_messages');
-    }
-  }, [chatMessages]);
-
-  useEffect(() => {
-    sessionStorage.setItem('afc_chat_open', String(chatWidgetOpen));
-  }, [chatWidgetOpen]);
 
   // When files are uploaded from Landing
   const handleUploadSuccess = async (formData, tolerances) => {
@@ -208,21 +161,6 @@ export default function App() {
         const firstExc = json.records.find(r => !['MATCH', 'DUPLICATE'].includes(r.status));
         if (firstExc) setSelectedTxId(firstExc.transaction_id);
       }
-
-      const totalRecs = json.summary?.total_records || json.records?.length || 0;
-      const matched = json.summary?.matched_count || json.records?.filter(r => r.status === 'MATCH').length || 0;
-      const exceptions = json.records?.filter(r => !['MATCH', 'DUPLICATE'].includes(r.status)).length || 0;
-
-      setChatMessages([
-        {
-          role: 'assistant',
-          content: `**Reconciliation Analysis Completed** (${label})\n\n` +
-            `• **${totalRecs} Transactions Processed**\n` +
-            `• **${matched} Reconciled Settlements**\n` +
-            `• **${exceptions} Discrepancies Flagged for Review**\n\n` +
-            `Ready for analytical queries or review of the Variance Ledger, 30-Day Liquidity Forecast, and General Ledger adjustments.`
-        }
-      ]);
     } catch (err) {
       setGlobalError(err.message || 'Failed to upload and reconcile files.');
     } finally {
@@ -249,22 +187,6 @@ export default function App() {
         const firstExc = json.records.find(r => !['MATCH', 'DUPLICATE'].includes(r.status));
         if (firstExc) setSelectedTxId(firstExc.transaction_id);
       }
-
-      const totalRecs = json.summary?.total_records || json.records?.length || 0;
-      const matched = json.summary?.matched_count || json.records?.filter(r => r.status === 'MATCH').length || 0;
-      const exceptions = json.records?.filter(r => !['MATCH', 'DUPLICATE'].includes(r.status)).length || 0;
-      const matchedMoney = json.summary?.cash_position?.matched_amount || 0;
-
-      setChatMessages([
-        {
-          role: 'assistant',
-          content: `**Enterprise Benchmark Dataset Loaded** (${totalRecs} transactions)\n\n` +
-            `• **${totalRecs} Ingested Records** (${json.summary?.duplicate_count || 0} duplicate entries isolated)\n` +
-            `• **${matched} Verified Matches** (₹${matchedMoney.toLocaleString()} reconciled)\n` +
-            `• **${exceptions} Active Variances** requiring review\n\n` +
-            `Proceed to the Variance Ledger or Liquidity Forecast to inspect variance forensics and journal entries.`
-        }
-      ]);
     } catch (err) {
       setGlobalError(err.message || 'Failed to load demo dataset.');
     } finally {
@@ -281,45 +203,10 @@ export default function App() {
     localStorage.removeItem('afc_selected_tx');
     localStorage.removeItem('afc_ledger_filter');
     localStorage.removeItem('afc_dataset_label');
-    localStorage.removeItem('afc_chat_messages');
-    sessionStorage.removeItem('afc_chat_messages');
-    sessionStorage.removeItem('afc_chat_open');
     setData(null);
     setActiveDatasetLabel('');
-    setChatMessages([]);
     setGlobalError(null);
     setActiveTab('overview');
-  };
-
-  // Send Chat Message to Gemini Copilot
-  const handleSendMessage = async (userPrompt, focusedTxParam = null) => {
-    const activeFocusedTx = focusedTxParam || focusedTxForChat || selectedTx || selectedTxId;
-    const newMessages = [...chatMessages, { role: 'user', content: userPrompt }];
-    setChatMessages(newMessages);
-    setChatLoading(true);
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: userPrompt,
-          history: newMessages.slice(-6),
-          focused_transaction_id: activeFocusedTx?.transaction_id || (typeof activeFocusedTx === 'string' ? activeFocusedTx : null),
-        }),
-      });
-
-      if (!res.ok) throw new Error('Chat engine response error');
-      const json = await res.json();
-      setChatMessages(prev => [...prev, { role: 'assistant', content: json.reply }]);
-    } catch (err) {
-      setChatMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: `⚠️ Error reaching AI engine: ${err.message}` }
-      ]);
-    } finally {
-      setChatLoading(false);
-    }
   };
 
   // Handle Exception One-Click Resolution
@@ -380,26 +267,6 @@ export default function App() {
     } catch (e) {
       console.error('Failed to undo transaction resolution', e);
     }
-  };
-
-  // Open AI Chat focused on a specific transaction
-  const handleAskAIAboutTx = (tx) => {
-    if (!tx) return;
-    setFocusedTxForChat(tx);
-    setChatWidgetOpen(true);
-
-    const txId = tx.transaction_id;
-    const vendor = tx.vendor || tx.invoice_customer || tx.payment_merchant || 'Customer';
-    const amount = tx.amount || 0;
-    const invAmount = tx.invoice_amount || amount;
-    const delta = tx.amount_delta || 0;
-    const date = tx.date || 'N/A';
-    const originalStatus = tx.status === 'AMOUNT_MISMATCH' ? 'Price Difference' : tx.status === 'DATE_MISMATCH' ? 'Settlement Date Delay' : tx.status === 'MISSING_INVOICE' ? 'Missing Invoice' : tx.status;
-    const action = tx.resolution_action || tx.resolution?.action || (tx.status === 'AMOUNT_MISMATCH' ? 'Processing Fee Adjusted (GL-6150)' : tx.status === 'DATE_MISMATCH' ? 'Date Delay Approved (GL-1050)' : 'AP Vendor Invoice Requested');
-
-    const promptText = `Explain the financial details, root cause, and adjustment applied for transaction ${txId} (${vendor}). Bank amount: ₹${amount.toLocaleString()}, Invoice amount: ₹${invAmount.toLocaleString()}, Variance: ₹${Math.abs(delta).toLocaleString()}, Original issue: ${originalStatus}, Adjustment: ${action}.`;
-    
-    handleSendMessage(promptText, tx);
   };
 
   // Export CSV helper
@@ -623,87 +490,70 @@ export default function App() {
 
         {/* Main Tab Content */}
         <main key={activeTab} className="flex-1 p-6 lg:p-8 max-w-[1600px] w-full mx-auto animate-fade-in">
-          {/* TAB 1: OVERVIEW & CHAT */}
+          {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
-          <ReconciliationOverviewAndChat
-            data={data}
-            onReset={handleReset}
-            onResolveTransaction={handleResolveTransaction}
-            onSendMessage={handleSendMessage}
-            chatMessages={chatMessages}
-            chatLoading={chatLoading}
-            activeDatasetLabel={activeDatasetLabel}
-          />
-        )}
+            <ReconciliationOverviewAndChat
+              data={data}
+              onResolve={handleResolveTransaction}
+              onNavigate={(tab) => setActiveTab(tab)}
+            />
+          )}
 
-        {/* TAB 2: EXCEPTION LEDGER & ROOT-CAUSE INSPECTOR */}
-        {activeTab === 'ledger' && (
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 h-[calc(100vh-140px)] min-h-[700px]">
-            <div className="xl:col-span-8 h-full">
-              <ExceptionLedger
-                records={data.records}
-                selectedTxId={selectedTx?.transaction_id}
-                onSelectTransaction={(tx) => setSelectedTxId(tx.transaction_id)}
-                activeFilter={activeLedgerFilter}
-                setActiveFilter={setActiveLedgerFilter}
-                onExport={handleExport}
-              />
+          {/* TAB 2: EXCEPTION LEDGER & ROOT-CAUSE INSPECTOR */}
+          {activeTab === 'ledger' && (
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 h-[calc(100vh-140px)] min-h-[700px]">
+              <div className="xl:col-span-8 h-full">
+                <ExceptionLedger
+                  records={data.records}
+                  selectedTxId={selectedTx?.transaction_id}
+                  onSelectTransaction={(tx) => setSelectedTxId(tx.transaction_id)}
+                  activeFilter={activeLedgerFilter}
+                  setActiveFilter={setActiveLedgerFilter}
+                  onExport={handleExport}
+                />
+              </div>
+              <div className="xl:col-span-4 h-full">
+                <AICommandCenter
+                  selectedTx={selectedTx}
+                  activeFilter={activeLedgerFilter}
+                  recentInsights={data.recent_insights || []}
+                  onResolve={handleResolveTransaction}
+                  onViewChanges={() => setActiveTab('changes')}
+                  onSelectInsight={(txId) => setSelectedTxId(txId)}
+                />
+              </div>
             </div>
-            <div className="xl:col-span-4 h-full">
-              <AICommandCenter
-                selectedTx={selectedTx}
-                activeFilter={activeLedgerFilter}
-                recentInsights={data.recent_insights || []}
-                onResolve={handleResolveTransaction}
-                onViewChanges={() => setActiveTab('changes')}
-                onSelectInsight={(txId) => setSelectedTxId(txId)}
-              />
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* TAB 3: BENCHMARK ACCURACY & GROUND TRUTH AUDIT */}
-        {activeTab === 'benchmark' && (
-          <BenchmarkEvaluationView 
-            data={data} 
-            onUploadSuccess={(updatedData) => setData(updatedData)} 
-            onAskAI={handleAskAIAboutTx}
-          />
-        )}
+          {/* TAB 3: BENCHMARK ACCURACY & GROUND TRUTH AUDIT */}
+          {activeTab === 'benchmark' && (
+            <BenchmarkEvaluationView 
+              data={data} 
+              onUploadSuccess={(updatedData) => setData(updatedData)} 
+            />
+          )}
 
-        {/* TAB 4: CASH FORECAST (30-DAY RUNWAY) */}
-        {activeTab === 'forecast' && (
-          <ForecastView onExport={handleExport} />
-        )}
+          {/* TAB 4: CASH FORECAST (30-DAY RUNWAY) */}
+          {activeTab === 'forecast' && (
+            <ForecastView onExport={handleExport} />
+          )}
 
-        {/* TAB 5: GENERAL LEDGER (GL) JOURNAL ADJUSTMENTS */}
-        {activeTab === 'gl' && (
-          <GLEntriesView onExport={handleExport} />
-        )}
+          {/* TAB 5: GENERAL LEDGER (GL) JOURNAL ADJUSTMENTS */}
+          {activeTab === 'gl' && (
+            <GLEntriesView onExport={handleExport} />
+          )}
 
-        {/* TAB 6: DATASET ADJUSTMENTS & AUDIT TRAIL */}
-        {activeTab === 'changes' && (
-          <AdjustmentsChangesView
-            records={data.records}
-            onBack={() => setActiveTab('ledger')}
-            onRevert={handleUnresolveTransaction}
-            onExport={handleExport}
-            onAskAI={handleAskAIAboutTx}
-          />
-        )}
-      </main>
+          {/* TAB 6: DATASET ADJUSTMENTS & AUDIT TRAIL */}
+          {activeTab === 'changes' && (
+            <AdjustmentsChangesView
+              records={data.records}
+              onBack={() => setActiveTab('ledger')}
+              onRevert={handleUnresolveTransaction}
+              onExport={handleExport}
+            />
+          )}
+        </main>
       </div>
-
-      {/* Floating Corner AI Chat Widget */}
-      <FloatingAIChatWidget
-        chatMessages={chatMessages}
-        onSendMessage={handleSendMessage}
-        chatLoading={chatLoading}
-        isOpen={chatWidgetOpen}
-        onOpenChange={setChatWidgetOpen}
-        focusedTx={focusedTxForChat}
-        onClearFocus={() => setFocusedTxForChat(null)}
-      />
     </div>
   );
 }

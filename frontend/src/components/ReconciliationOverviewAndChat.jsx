@@ -13,7 +13,9 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
-  Zap
+  Zap,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { MarkdownMessage } from './MarkdownMessage';
 
@@ -26,7 +28,55 @@ export function ReconciliationOverviewAndChat({
   const [activeFilter, setActiveFilter] = useState('ALL');
   const [resolvedTxs, setResolvedTxs] = useState(new Set());
 
+  // Scoped AI State & Client Caches
+  const [summaryAiCache, setSummaryAiCache] = useState(null);
+  const [summaryAiLoading, setSummaryAiLoading] = useState(false);
+  const [summaryAiError, setSummaryAiError] = useState(null);
+
+  const [txAiCache, setTxAiCache] = useState({});
+  const [txAiLoading, setTxAiLoading] = useState({});
+  const [txAiError, setTxAiError] = useState({});
+
   if (!data) return null;
+
+  const handleAskSummaryAI = async () => {
+    if (summaryAiCache) return;
+    setSummaryAiLoading(true);
+    setSummaryAiError(null);
+    try {
+      const res = await fetch('/api/ask/summary', { method: 'POST' });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server error (${res.status})`);
+      }
+      const json = await res.json();
+      setSummaryAiCache(json.reply);
+    } catch (err) {
+      setSummaryAiError(err.message || 'Failed to generate AI summary.');
+    } finally {
+      setSummaryAiLoading(false);
+    }
+  };
+
+  const handleAskTxAI = async (txId) => {
+    if (!txId) return;
+    if (txAiCache[txId]) return;
+    setTxAiLoading(prev => ({ ...prev, [txId]: true }));
+    setTxAiError(prev => ({ ...prev, [txId]: null }));
+    try {
+      const res = await fetch(`/api/ask/transaction/${encodeURIComponent(txId)}`, { method: 'POST' });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server error (${res.status})`);
+      }
+      const json = await res.json();
+      setTxAiCache(prev => ({ ...prev, [txId]: json.reply }));
+    } catch (err) {
+      setTxAiError(prev => ({ ...prev, [txId]: err.message || 'Failed to generate AI diagnosis.' }));
+    } finally {
+      setTxAiLoading(prev => ({ ...prev, [txId]: false }));
+    }
+  };
 
   const records = data.records || [];
   const summary = data.summary || {};
@@ -140,17 +190,64 @@ export function ReconciliationOverviewAndChat({
         </div>
 
         {/* Executive Forensic Briefing */}
-        <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0E1524] border border-[#E2E8F0] dark:border-[#1E293B] space-y-1.5">
-          <div className="text-xs font-semibold uppercase tracking-wider text-[#1D4ED8] dark:text-[#60A5FA] flex items-center gap-1.5 font-sans">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6]"></span>
-            OPERATIONAL BRIEFING & FINDINGS
+        <div className="p-4 rounded-xl bg-[#F8FAFC] dark:bg-[#0E1524] border border-[#E2E8F0] dark:border-[#1E293B] space-y-2.5">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-[#1D4ED8] dark:text-[#60A5FA] flex items-center gap-1.5 font-sans">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB] dark:bg-[#3B82F6]"></span>
+              OPERATIONAL BRIEFING & FINDINGS
+            </div>
+
+            <button
+              onClick={handleAskSummaryAI}
+              disabled={summaryAiLoading}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              title="Generate scoped executive summary from reconciliation aggregates"
+            >
+              {summaryAiLoading ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Thinking...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                  <span>{summaryAiCache ? 'Executive AI Summary' : '✨ Ask AI Summary'}</span>
+                </>
+              )}
+            </button>
           </div>
-          <p className="text-[#334155] dark:text-[#CBD5E1] text-xs sm:text-sm leading-relaxed font-sans">
-            {summary.executive_summary || (
-              `Automated reconciliation verified ${matches.length} matching transactions (${cleanMatchRate.toFixed(1)}% match rate) across ${records.length} ingested records. ` +
-              `Identified ${exceptions.length} exceptions requiring review, totaling ₹${(cashPos.total_variance || 0).toLocaleString()} in net price/fee variances and ₹${(cashPos.pending_amount || 0).toLocaleString()} in pending transit funds.`
-            )}
-          </p>
+
+          {summaryAiError && (
+            <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                <span className="truncate">{summaryAiError}</span>
+              </div>
+              <button
+                onClick={handleAskSummaryAI}
+                className="px-2 py-0.5 rounded bg-white hover:bg-rose-100 text-rose-800 text-[10px] font-semibold border border-rose-300 shrink-0"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {summaryAiCache ? (
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 shadow-md space-y-2 animate-fade-in font-sans">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-cyan-400 uppercase tracking-wider mb-0.5">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Executive AI Reconciliation Brief</span>
+              </div>
+              <MarkdownMessage content={summaryAiCache} />
+            </div>
+          ) : (
+            <p className="text-[#334155] dark:text-[#CBD5E1] text-xs sm:text-sm leading-relaxed font-sans">
+              {summary.executive_summary || (
+                `Automated reconciliation verified ${matches.length} matching transactions (${cleanMatchRate.toFixed(1)}% match rate) across ${records.length} ingested records. ` +
+                `Identified ${exceptions.length} exceptions requiring review, totaling ₹${(cashPos.total_variance || 0).toLocaleString()} in net price/fee variances and ₹${(cashPos.pending_amount || 0).toLocaleString()} in pending transit funds.`
+              )}
+            </p>
+          )}
         </div>
 
         {/* Visual Analytics Breakdown Grid */}
@@ -365,30 +462,78 @@ export function ReconciliationOverviewAndChat({
                           <span className="text-[#1A1F36] font-semibold">Diagnosis:</span> {r.explanation || r.reason || 'Variance requires controller review.'}
                         </p>
 
-                        {!isResolved && (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {r.status === 'AMOUNT_MISMATCH' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'post_fee_adjustment')} className="px-3 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-medium transition-all shadow-xs">
-                                Post Fee Adjustment (GL-6150)
-                              </button>
-                            )}
-                            {r.status === 'DATE_MISMATCH' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'accept_date_drift')} className="px-3 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-medium transition-all shadow-xs">
-                                Approve Settlement Drift ({Math.abs(r.date_delta_days || 0)}d)
-                              </button>
-                            )}
-                            {r.status === 'MISSING_INVOICE' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'request_bill_ap')} className="px-3 py-1 bg-white hover:bg-purple-50 text-purple-700 border border-purple-300 rounded-lg text-xs font-medium transition-all shadow-xs">
-                                Request AP Invoice from Vendor
-                              </button>
-                            )}
-                            {r.status === 'MULTIPLE_MATCHES' && (
-                              <button onClick={() => handleResolve(r.transaction_id, 'confirm_multi_match')} className="px-3 py-1 bg-white hover:bg-amber-50 text-amber-700 border border-amber-300 rounded-lg text-xs font-medium transition-all shadow-xs">
-                                Review Shared PO Candidates
-                              </button>
-                            )}
+                        {txAiError[r.transaction_id] && (
+                          <div className="p-2.5 mb-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                              <span className="truncate">{txAiError[r.transaction_id]}</span>
+                            </div>
+                            <button
+                              onClick={() => handleAskTxAI(r.transaction_id)}
+                              className="px-2 py-0.5 rounded bg-white hover:bg-rose-100 text-rose-800 text-[10px] font-semibold border border-rose-300 shrink-0"
+                            >
+                              Retry
+                            </button>
                           </div>
                         )}
+
+                        {txAiCache[r.transaction_id] && (
+                          <div className="p-3.5 mb-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 shadow-md space-y-2 animate-fade-in font-sans">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-cyan-400 uppercase tracking-wider mb-1">
+                              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Scoped AI Forensics ({r.transaction_id})</span>
+                            </div>
+                            <MarkdownMessage content={txAiCache[r.transaction_id]} />
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-gray-100 dark:border-gray-800">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {!isResolved && (
+                              <>
+                                {r.status === 'AMOUNT_MISMATCH' && (
+                                  <button onClick={() => handleResolve(r.transaction_id, 'post_fee_adjustment')} className="px-3 py-1 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-medium transition-all shadow-xs">
+                                    Post Fee Adjustment (GL-6150)
+                                  </button>
+                                )}
+                                {r.status === 'DATE_MISMATCH' && (
+                                  <button onClick={() => handleResolve(r.transaction_id, 'accept_date_drift')} className="px-3 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded-lg text-xs font-medium transition-all shadow-xs">
+                                    Approve Settlement Drift ({Math.abs(r.date_delta_days || 0)}d)
+                                  </button>
+                                )}
+                                {r.status === 'MISSING_INVOICE' && (
+                                  <button onClick={() => handleResolve(r.transaction_id, 'request_bill_ap')} className="px-3 py-1 bg-white hover:bg-purple-50 text-purple-700 border border-purple-300 rounded-lg text-xs font-medium transition-all shadow-xs">
+                                    Request AP Invoice from Vendor
+                                  </button>
+                                )}
+                                {r.status === 'MULTIPLE_MATCHES' && (
+                                  <button onClick={() => handleResolve(r.transaction_id, 'confirm_multi_match')} className="px-3 py-1 bg-white hover:bg-amber-50 text-amber-700 border border-amber-300 rounded-lg text-xs font-medium transition-all shadow-xs">
+                                    Review Shared PO Candidates
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => handleAskTxAI(r.transaction_id)}
+                            disabled={txAiLoading[r.transaction_id]}
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#1D4ED8] border border-blue-200 rounded-lg text-xs font-semibold transition-all inline-flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                            title="Generate isolated AI explanation for this transaction"
+                          >
+                            {txAiLoading[r.transaction_id] ? (
+                              <>
+                                <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />
+                                <span>Thinking...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-3 h-3 text-blue-600" />
+                                <span>{txAiCache[r.transaction_id] ? 'AI Diagnosed' : '✨ Ask AI'}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     );
                   })}

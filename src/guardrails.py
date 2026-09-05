@@ -73,6 +73,71 @@ class FinancialGuardrailEngine:
         r"^what\s+can\s+you\s+do\b",
     ]
 
+    PORTFOLIO_PHRASES = (
+        "list all", "show all", "all the", "all date", "date difference", "date differences",
+        "date mismatch", "date mismatches", "date drift", "amount mismatch", "amount mismatches",
+        "amount difference", "amount differences", "all variances", "missing invoice", "missing invoices",
+        "unbilled", "all duplicate", "all duplicates", "all exception", "all exceptions",
+        "all transaction", "all transactions", "overall", "total summary", "batch overview",
+        "portfolio", "this batch", "this dataset", "this ledger", "this reconciliation",
+        "this portfolio", "how many", "how much", "match rate", "cash position", "cash forecast",
+        "liquidity", "runway", "overview", "summary", "exceptions", "duplicates", "forecast",
+        "journal entries", "gl entries", "fee leakage", "merchant", "forensic financial story",
+        "working capital", "next steps", "what should i look",
+    )
+
+    ANAPHORA_PHRASES = (
+        "this one", "that one", "this transaction", "this tx", "that transaction",
+        "the transaction", "the fee", "the variance", "the vendor", "fix it", "resolve it",
+        "why though", "how do i fix", "how to fix", "how do i resolve", "how to resolve",
+        "what happened", "tell me more", "go on", "keep going",
+    )
+
+    CONTEXTUAL_ITEM_PHRASES = (
+        "amount different", "why was", "why is the amount", "why did", "root cause",
+        "journal entry", "show the journal", "how should i resolve", "how should i fix",
+    )
+
+    VENDOR_STOPWORDS = {
+        "cash", "bank", "payment", "deposit", "invoice", "transfer", "online",
+        "credit", "debit", "customer", "vendor", "merchant", "fee",
+    }
+
+    @staticmethod
+    def is_portfolio_query(query: str) -> bool:
+        """True when the user is asking about the batch as a whole, not one row."""
+        q = query.lower()
+        if any(p in q for p in FinancialGuardrailEngine.PORTFOLIO_PHRASES):
+            return True
+        if re.search(r"\b(all|every|entire|whole)\b.{0,24}\b(tx|transaction|exception|record|item)s?\b", q):
+            return True
+        return False
+
+    @staticmethod
+    def is_anaphoric_followup(query: str) -> bool:
+        """True only for follow-ups that clearly refer to a previously discussed item."""
+        q = query.lower().strip()
+        if FinancialGuardrailEngine.is_portfolio_query(query):
+            return False
+        if any(p in q for p in FinancialGuardrailEngine.ANAPHORA_PHRASES):
+            return True
+        words = re.findall(r"[a-z0-9']+", q)
+        if len(words) <= 6 and any(w in ("it", "this", "that") for w in words):
+            return True
+        if len(words) <= 3 and q in ("why", "how", "next", "and", "more", "continue", "details"):
+            return True
+        return False
+
+    @staticmethod
+    def should_bind_contextual_transaction(query: str) -> bool:
+        """Bind UI focus / chat history to a TX only when the question is about that implied item."""
+        if FinancialGuardrailEngine.is_portfolio_query(query):
+            return False
+        q = query.lower()
+        if any(p in q for p in FinancialGuardrailEngine.CONTEXTUAL_ITEM_PHRASES):
+            return True
+        return FinancialGuardrailEngine.is_anaphoric_followup(query)
+
     @staticmethod
     def extract_entity_references(
         query: str,
@@ -83,9 +148,9 @@ class FinancialGuardrailEngine:
         """
         Extracts and verifies transaction IDs, invoices, and vendors mentioned in:
         1. The active query text (direct or normalized match).
-        2. The UI-focused transaction ID (`focused_tx_id`).
-        3. Prior conversation turns (`history`) when the user asks contextual follow-up questions
-           with anaphoric pronouns ("it", "this transaction", "this", "the fee", "how do I fix it?").
+        2. The UI-focused transaction ID (`focused_tx_id`) — only for follow-ups about that item.
+        3. Prior conversation turns (`history`) when the user uses anaphora
+           ("it", "this transaction", "how do I fix it?").
         """
         q_upper = query.upper()
         q_lower = query.lower()
@@ -132,35 +197,21 @@ class FinancialGuardrailEngine:
                     found_records.append(rec)
                     resolution_source = "query_invoice"
 
-        # Check if query is an explicit batch/aggregate query that should NOT attach a single focused transaction
-        batch_terms = [
-            "list all", "show all", "all the", "all date", "date difference", "date differences",
-            "date mismatch", "date mismatches", "date drift", "amount mismatch", "amount mismatches",
-            "amount difference", "amount differences", "all variances", "missing invoice", "missing invoices",
-            "unbilled", "all duplicate", "all duplicates", "all exception", "all exceptions",
-            "all transaction", "all transactions", "overall", "total summary", "batch overview", "portfolio"
-        ]
-        is_explicit_batch_query = any(bt in q_lower for bt in batch_terms) and not any(
-            str(r.get("transaction_id", "")).upper() in q_upper for r in all_records if r.get("transaction_id")
-        )
+        is_explicit_batch_query = FinancialGuardrailEngine.is_portfolio_query(query) and not found_records
+        bind_context = FinancialGuardrailEngine.should_bind_contextual_transaction(query)
 
-        # 2. If not an explicit batch query and nothing directly in query, check focused_tx_id (from UI selection)
-        if not found_records and not is_explicit_batch_query and focused_tx_id:
+        # 2. UI focus applies only when the user is actually talking about that item
+        if not found_records and not is_explicit_batch_query and focused_tx_id and bind_context:
             rec = find_record_by_id(focused_tx_id)
             if rec:
                 referenced_ids.add(rec["transaction_id"])
                 found_records.append(rec)
                 resolution_source = "ui_focus"
 
-        # 3. If still nothing and not an explicit batch query, check history for anaphoric follow-up references
-        follow_up_tokens = ["this", "that", "it", "the transaction", "the fee", "the variance", "the vendor", "fix it", "why", "what happened", "how to resolve", "journal entry"]
-        is_follow_up = (any(tok in q_lower for tok in follow_up_tokens) or len(query.split()) <= 4) and not is_explicit_batch_query
-
-        if not found_records and is_follow_up and history:
-            # Scan history backwards from most recent turn
+        # 3. History anaphora — only for genuine follow-ups, never for batch questions
+        if not found_records and bind_context and history:
             for turn in reversed(history):
                 content = str(turn.get("content", ""))
-                # Look for transaction IDs mentioned in prior turns
                 hist_ids = re.findall(r"\b(?:TX|TRX|BL|TXN)[-_]?\d+[A-Z]?\b", content, re.IGNORECASE)
                 for hid in hist_ids:
                     rec = find_record_by_id(hid)
@@ -172,13 +223,17 @@ class FinancialGuardrailEngine:
                 if found_records:
                     break
 
-        # Check for vendor mentions
+        # Check for vendor mentions (full name or distinctive tokens — not "cash"/"bank")
         matched_vendors = []
         for r in all_records:
             vendor = str(r.get("vendor", "") or r.get("counterparty", "") or "").strip()
             if vendor and len(vendor) >= 3:
                 v_lower = vendor.lower()
-                if v_lower in q_lower or any(tok in q_lower for tok in v_lower.split() if len(tok) >= 4):
+                tokens = [
+                    tok for tok in re.findall(r"[a-z0-9]+", v_lower)
+                    if len(tok) >= 5 and tok not in FinancialGuardrailEngine.VENDOR_STOPWORDS
+                ]
+                if v_lower in q_lower or any(tok in q_lower for tok in tokens):
                     if vendor not in matched_vendors:
                         matched_vendors.append(vendor)
 
@@ -285,8 +340,18 @@ class FinancialGuardrailEngine:
         if any(w in q_lower for w in ["journal", "entry", "gl code", "gl-", "debit", "credit", "bookkeeping", "post adjustment", "tally", "quickbooks", "accounting entry"]):
             return "JOURNAL_ENTRY"
 
-        # 2. Root Cause / Forensic Investigation (check before action to avoid 'transaction' substring)
-        if any(w in q_lower for w in ["why did", "why is", "root cause", "reason", "why was", "why flagged", "discrepancy cause", "what caused", "why"]) or re.search(r"\b(cause|fail(?:ed|s|ing)?|mismatch|issue)\b", q_lower):
+        # 2. Root Cause / Forensic Investigation
+        why_stems = (
+            "why did", "why is", "root cause", "reason", "why was", "why flagged",
+            "discrepancy cause", "what caused",
+        )
+        if any(w in q_lower for w in why_stems) or (
+            has_focused_tx
+            and (
+                q_lower.strip() in ("why", "why though", "why?")
+                or re.search(r"\b(cause|fail(?:ed|s|ing)?)\b", q_lower)
+            )
+        ):
             return "ROOT_CAUSE"
 
         # 3. Resolution Action / Next Steps

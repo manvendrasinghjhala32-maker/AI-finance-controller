@@ -17,19 +17,46 @@ import {
   Calendar,
   Sparkles,
   HelpCircle,
-  TrendingDown
+  TrendingDown,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export function AdjustmentsChangesView({ 
   records = [], 
   onBack, 
   onRevert,
-  onExport,
-  onAskAI
+  onExport
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('ALL'); // 'ALL' | 'AMOUNT' | 'DATE' | 'MISSING'
   const [selectedAdjustment, setSelectedAdjustment] = useState(null);
+
+  // Scoped AI state & client cache
+  const [aiCache, setAiCache] = useState({});
+  const [aiLoading, setAiLoading] = useState({});
+  const [aiError, setAiError] = useState({});
+
+  const handleAskAI = async (txId) => {
+    if (!txId) return;
+    if (aiCache[txId]) return;
+    setAiLoading(prev => ({ ...prev, [txId]: true }));
+    setAiError(prev => ({ ...prev, [txId]: null }));
+    try {
+      const res = await fetch(`/api/ask/transaction/${encodeURIComponent(txId)}`, { method: 'POST' });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server error (${res.status})`);
+      }
+      const json = await res.json();
+      setAiCache(prev => ({ ...prev, [txId]: json.reply }));
+    } catch (err) {
+      setAiError(prev => ({ ...prev, [txId]: err.message || 'Failed to generate explanation.' }));
+    } finally {
+      setAiLoading(prev => ({ ...prev, [txId]: false }));
+    }
+  };
 
   // Extract resolved records
   const resolvedRecords = useMemo(() => {
@@ -422,19 +449,23 @@ export function AdjustmentsChangesView({
                           </button>
 
                           {/* Ask AI Button */}
-                          {onAskAI && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onAskAI(r);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#1D4ED8] border border-blue-200 transition-colors text-[11px] font-medium inline-flex items-center gap-1 shadow-xs cursor-pointer"
-                              title={`Copilot inquiry for ${r.transaction_id}`}
-                            >
-                              <Bot className="w-3 h-3 text-[#2563EB]" />
-                              <span>Copilot</span>
-                            </button>
-                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAskAI(r.transaction_id);
+                              setSelectedAdjustment(r);
+                            }}
+                            disabled={aiLoading[r.transaction_id]}
+                            className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#1D4ED8] border border-blue-200 transition-colors text-[11px] font-medium inline-flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
+                            title={`AI explanation for ${r.transaction_id}`}
+                          >
+                            {aiLoading[r.transaction_id] ? (
+                              <RefreshCw className="w-3 h-3 animate-spin text-blue-600" />
+                            ) : (
+                              <Sparkles className="w-3 h-3 text-[#2563EB]" />
+                            )}
+                            <span>{aiCache[r.transaction_id] ? 'AI Diagnosed' : 'Ask AI'}</span>
+                          </button>
 
                           {/* Undo Button */}
                           {onRevert && (
@@ -460,41 +491,72 @@ export function AdjustmentsChangesView({
         </div>
       )}
 
-      {/* 5. Clear, Simple "How it Was Fixed" Modal */}
+      {/* 4. Full Adjustment Deep Dive Modal */}
       {selectedAdjustment && (() => {
-        const exp = getAdjustmentExplanation(selectedAdjustment);
-        const Icon = exp.icon;
+        const r = selectedAdjustment;
+        const exp = getAdjustmentExplanation(r);
+        const txAiReply = aiCache[r.transaction_id];
+        const isTxAiLoading = aiLoading[r.transaction_id];
+        const txAiErrMsg = aiError[r.transaction_id];
 
         return (
-          <div 
-            className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
-            onClick={() => setSelectedAdjustment(null)}
-          >
-            <div 
-              className="bg-white border border-gray-200 rounded-xl max-w-xl w-full p-6 shadow-xl space-y-4"
-              onClick={(e) => e.stopPropagation()}
-            >
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white border border-gray-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
               {/* Modal Header */}
-              <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-                <div>
-                  <h2 className="text-xs font-bold text-[#1A1F36] uppercase tracking-wide flex items-center gap-2">
-                    <span>{selectedAdjustment.transaction_id} Adjustment Audit</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
-                      Balanced
-                    </span>
-                  </h2>
-                  <p className="text-[11px] text-gray-500 font-sans mt-0.5">
-                    {selectedAdjustment.vendor || selectedAdjustment.invoice_customer || 'Counterparty'} • Date: {selectedAdjustment.date || 'N/A'}
-                  </p>
+              <div className="flex items-center justify-between pb-3 border-b border-gray-200">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-[#2563EB]">
+                    <FileCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-xs font-bold uppercase tracking-wider text-[#1A1F36]">
+                      Adjustment Audit Record
+                    </h2>
+                    <p className="text-[11px] font-mono text-gray-500">
+                      TXN: {r.transaction_id} • {r.vendor || 'Counterparty'}
+                    </p>
+                  </div>
                 </div>
-
-                <button 
+                <button
                   onClick={() => setSelectedAdjustment(null)}
                   className="p-1 rounded-lg bg-white hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors border border-gray-200 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
+
+              {/* Scoped AI Section in Modal */}
+              {txAiErrMsg && (
+                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600" />
+                    <span>{txAiErrMsg}</span>
+                  </div>
+                  <button
+                    onClick={() => handleAskAI(r.transaction_id)}
+                    className="px-2 py-0.5 rounded bg-white hover:bg-rose-100 text-rose-800 text-xs font-semibold border border-rose-300"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {txAiReply ? (
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 shadow-md space-y-2 animate-fade-in font-sans">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Scoped AI Forensic Diagnosis ({r.transaction_id})</span>
+                  </div>
+                  <div className="text-xs text-slate-200 leading-relaxed">
+                    <MarkdownMessage content={txAiReply} />
+                  </div>
+                </div>
+              ) : isTxAiLoading ? (
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-750 flex items-center gap-2 text-xs text-cyan-400 font-sans shadow-sm">
+                  <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
+                  <span>Generating AI diagnosis for {r.transaction_id}...</span>
+                </div>
+              ) : null}
 
               {/* Step-by-Step Explanation List */}
               <div className="space-y-2">
@@ -517,17 +579,13 @@ export function AdjustmentsChangesView({
 
               {/* Modal Bottom Actions */}
               <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                {onAskAI ? (
+                {!txAiReply && !isTxAiLoading ? (
                   <button
-                    onClick={() => {
-                      const tx = selectedAdjustment;
-                      setSelectedAdjustment(null);
-                      onAskAI(tx);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-[#0C2340] hover:bg-[#162E50] text-white text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                    onClick={() => handleAskAI(r.transaction_id)}
+                    className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#1D4ED8] border border-blue-200 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
                   >
-                    <Bot className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Inquire with Copilot</span>
+                    <Sparkles className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <span>✨ Ask AI Diagnosis</span>
                   </button>
                 ) : <div />}
 

@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * Lightweight, robust Markdown & Table parser for AI Financial Copilot messages.
- * Uses theme palette: #212121 (main), #171717 (card), #2F2F2F (input/table header), #3A3A3A (hover).
+ * Optimized for dark containers (#0F172A / #1E293B) with high-contrast text and glowing code chips.
  */
 export function MarkdownMessage({ content }) {
   if (!content) return null;
@@ -16,24 +16,24 @@ export function MarkdownMessage({ content }) {
   const flushTable = (key) => {
     if (tableHeader.length > 0 || tableRows.length > 0) {
       elements.push(
-        <div key={`table-${key}`} className="my-2.5 overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-xs">
+        <div key={`table-${key}`} className="my-2.5 overflow-x-auto rounded-lg border border-slate-700 bg-slate-950 shadow-xs">
           <table className="min-w-full text-xs text-left">
             {tableHeader.length > 0 && (
-              <thead className="bg-gray-50 text-gray-600 font-semibold border-b border-gray-200">
+              <thead className="bg-slate-900 text-slate-300 font-semibold border-b border-slate-750">
                 <tr>
                   {tableHeader.map((th, i) => (
-                    <th key={i} className="px-3 py-2 whitespace-nowrap font-mono text-gray-700 text-[10px] uppercase">
+                    <th key={i} className="px-3 py-2 whitespace-nowrap font-mono text-cyan-300 text-[10px] uppercase">
                       {formatInlineText(th)}
                     </th>
                   ))}
                 </tr>
               </thead>
             )}
-            <tbody className="divide-y divide-gray-200 text-gray-800">
+            <tbody className="divide-y divide-slate-800 text-slate-200">
               {tableRows.map((row, rIdx) => (
-                <tr key={rIdx} className="hover:bg-gray-50/80 transition-colors">
+                <tr key={rIdx} className="hover:bg-slate-900/60 transition-colors">
                   {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">
+                    <td key={cIdx} className="px-3 py-1.5 whitespace-nowrap font-mono text-xs text-slate-300">
                       {formatInlineText(cell)}
                     </td>
                   ))}
@@ -75,19 +75,19 @@ export function MarkdownMessage({ content }) {
     // Headers
     if (trimmed.startsWith('### ')) {
       elements.push(
-        <h3 key={idx} className="text-sm font-bold text-[#1A1F36] mt-3 mb-1.5 flex items-center gap-1.5 border-b border-gray-200 pb-1 font-sans">
+        <h3 key={idx} className="text-sm font-bold text-white mt-3 mb-1.5 flex items-center gap-1.5 border-b border-slate-700/60 pb-1 font-sans">
           {formatInlineText(trimmed.replace('### ', ''))}
         </h3>
       );
     } else if (trimmed.startsWith('## ')) {
       elements.push(
-        <h2 key={idx} className="text-base font-bold text-[#1A1F36] mt-4 mb-2">
+        <h2 key={idx} className="text-base font-bold text-white mt-4 mb-2">
           {formatInlineText(trimmed.replace('## ', ''))}
         </h2>
       );
     } else if (trimmed.startsWith('# ')) {
       elements.push(
-        <h1 key={idx} className="text-lg font-bold text-[#1A1F36] mt-4 mb-2">
+        <h1 key={idx} className="text-lg font-bold text-white mt-4 mb-2">
           {formatInlineText(trimmed.replace('# ', ''))}
         </h1>
       );
@@ -96,8 +96,8 @@ export function MarkdownMessage({ content }) {
     else if (trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')) {
       const bulletText = trimmed.replace(/^[-•*]\s+/, '');
       elements.push(
-        <div key={idx} className="flex items-start gap-2 my-1 text-xs sm:text-sm text-gray-700 leading-relaxed pl-1">
-          <span className="text-[#2563EB] font-bold mt-0.5">•</span>
+        <div key={idx} className="flex items-start gap-2 my-1 text-xs sm:text-sm text-slate-200 leading-relaxed pl-1">
+          <span className="text-cyan-400 font-bold mt-0.5">•</span>
           <span className="flex-1">{formatInlineText(bulletText)}</span>
         </div>
       );
@@ -107,8 +107,8 @@ export function MarkdownMessage({ content }) {
       const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
       if (numMatch) {
         elements.push(
-          <div key={idx} className="flex items-start gap-2 my-1.5 text-xs sm:text-sm text-gray-700 leading-relaxed pl-1">
-            <span className="w-5 h-5 rounded-full bg-blue-50 text-[#1D4ED8] border border-blue-200 flex-shrink-0 flex items-center justify-center font-mono text-[11px] font-bold mt-0.5">
+          <div key={idx} className="flex items-start gap-2 my-1.5 text-xs sm:text-sm text-slate-200 leading-relaxed pl-1">
+            <span className="w-5 h-5 rounded-full bg-slate-800 text-cyan-300 border border-slate-700 flex-shrink-0 flex items-center justify-center font-mono text-[11px] font-bold mt-0.5">
               {numMatch[1]}
             </span>
             <span className="flex-1">{formatInlineText(numMatch[2])}</span>
@@ -123,7 +123,7 @@ export function MarkdownMessage({ content }) {
     // Normal paragraph
     else {
       elements.push(
-        <p key={idx} className="my-1 text-xs sm:text-sm text-gray-700 leading-relaxed">
+        <p key={idx} className="my-1.5 text-xs sm:text-sm text-slate-200 leading-relaxed">
           {formatInlineText(trimmed)}
         </p>
       );
@@ -135,11 +135,11 @@ export function MarkdownMessage({ content }) {
     flushTable('end');
   }
 
-  return <div className="space-y-0.5">{elements}</div>;
+  return <div className="space-y-1">{elements}</div>;
 }
 
 /**
- * Parses inline styling: **bold**, `code`, and currency highlights
+ * Parses inline styling: **bold**, `code`, and highlights
  */
 function formatInlineText(text) {
   if (!text) return '';
@@ -157,14 +157,14 @@ function formatInlineText(text) {
     if (token.startsWith('**') && token.endsWith('**')) {
       const boldContent = token.slice(2, -2);
       parts.push(
-        <strong key={match.index} className="font-bold text-[#1A1F36]">
+        <strong key={match.index} className="font-bold text-white tracking-tight">
           {boldContent}
         </strong>
       );
     } else if (token.startsWith('`') && token.endsWith('`')) {
       const codeContent = token.slice(1, -1);
       parts.push(
-        <code key={match.index} className="px-1.5 py-0.5 mx-0.5 rounded bg-gray-100 text-[#1D4ED8] border border-gray-200 font-mono text-[11px]">
+        <code key={match.index} className="px-1.5 py-0.5 mx-0.5 rounded-md bg-slate-800/90 text-cyan-300 border border-slate-700 font-mono text-[11px] font-medium shadow-xs">
           {codeContent}
         </code>
       );

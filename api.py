@@ -52,7 +52,10 @@ from src.reporter import (
 from src.agent import (
     explain_exceptions,
     generate_executive_summary,
-    ask_question,
+    explain_transaction,
+    explain_summary,
+    explain_forecast,
+    explain_journal_entry,
     calculate_risk_scores,
     generate_journal_entries,
     forecast_forward_cash,
@@ -272,11 +275,6 @@ class ResolveAction(BaseModel):
     transaction_id: str
     action: str  # "post_fee_adjustment", "accept_date_drift", "request_bill_ap", "manual_override"
     note: Optional[str] = None
-
-class ChatRequest(BaseModel):
-    message: str
-    history: Optional[List[Dict[str, str]]] = None
-    focused_transaction_id: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -567,32 +565,85 @@ def unresolve_transaction(req: dict):
     return {"status": "success", "transaction_id": tx_id}
 
 
-@app.post("/api/chat")
-def ai_chat_copilot(req: ChatRequest):
-    if not req.message.strip():
-        raise HTTPException(status_code=400, detail="Empty prompt message.")
-
+@app.post("/api/ask/transaction/{transaction_id}")
+def ask_transaction_explanation(transaction_id: str):
     if store.results is None:
         if not load_session_cache() or store.results is None:
             run_pipeline(skip_llm=True)
+    try:
+        reply = explain_transaction(
+            transaction_id=transaction_id,
+            results=store.results or [],
+            bank_df=store.bank_df,
+            invoices_df=store.invoices_df,
+            payments_df=store.payments_df,
+            verbose=False,
+        )
+        return {
+            "transaction_id": transaction_id,
+            "reply": reply,
+            "timestamp": datetime.now().isoformat(),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate explanation: {str(e)}")
 
-    reply = ask_question(
-        question=req.message,
-        results=store.results or [],
-        bank_df=store.bank_df,
-        invoices_df=store.invoices_df,
-        payments_df=store.payments_df,
-        metrics=store.metrics,
-        history=req.history,
-        resolved_overrides=store.resolved_overrides,
-        focused_transaction_id=req.focused_transaction_id,
-        verbose=False,
-    )
 
-    return {
-        "reply": reply,
-        "timestamp": datetime.now().isoformat(),
-    }
+@app.post("/api/ask/summary")
+def ask_reconciliation_summary():
+    if store.results is None:
+        if not load_session_cache() or store.results is None:
+            run_pipeline(skip_llm=True)
+    try:
+        reply = explain_summary(
+            results=store.results or [],
+            verbose=False,
+        )
+        return {
+            "reply": reply,
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
+
+
+@app.post("/api/ask/forecast")
+def ask_forecast_explanation():
+    if store.cash_forecast is None:
+        run_pipeline(skip_llm=True)
+    try:
+        reply = explain_forecast(
+            forecast_df=store.cash_forecast,
+            verbose=False,
+        )
+        return {
+            "reply": reply,
+            "timestamp": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate forecast explanation: {str(e)}")
+
+
+@app.post("/api/ask/journal/{entry_id}")
+def ask_journal_explanation(entry_id: str):
+    if store.journal_entries is None:
+        run_pipeline(skip_llm=True)
+    try:
+        reply = explain_journal_entry(
+            entry_id=entry_id,
+            journal_entries_df=store.journal_entries,
+            verbose=False,
+        )
+        return {
+            "entry_id": entry_id,
+            "reply": reply,
+            "timestamp": datetime.now().isoformat(),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate journal explanation: {str(e)}")
 
 
 @app.get("/api/gl-entries")

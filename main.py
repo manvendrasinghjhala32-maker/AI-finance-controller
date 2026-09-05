@@ -14,7 +14,7 @@ from src.config import (
 )
 from src.ingestion import load_all_data
 from src.reconciler import reconcile, measure_accuracy
-from src.agent import explain_exceptions, generate_executive_summary, ask_question
+from src.agent import explain_exceptions, generate_executive_summary, explain_summary, explain_transaction
 from src.reporter import (
     save_reconciliation_report,
     save_exception_report,
@@ -94,14 +94,17 @@ def main():
         # 4b. Executive summary
         executive_summary = generate_executive_summary(results, verbose=True)
 
-        # 4c. Sample Q&A
-        print("\n--- Settlement Q&A ---")
-        sample_questions = [
-            "Which transactions have pending payments and also have exceptions?",
-            "What is the total amount variance from amount mismatches?",
-        ]
-        for q in sample_questions:
-            ask_question(q, results, verbose=True)
+        # 4c. Scoped AI Explanations
+        print("\n--- Scoped AI Summary ---")
+        summary_explanation = explain_summary(results, verbose=True)
+        print(summary_explanation)
+
+        exceptions = [r for r in results if r.status not in ("MATCH", "DUPLICATE")]
+        if exceptions:
+            sample_tx = exceptions[0].transaction_id
+            print(f"\n--- Scoped AI Exception Diagnosis ({sample_tx}) ---")
+            tx_explanation = explain_transaction(sample_tx, results, bank, invoices, payments, verbose=True)
+            print(tx_explanation)
 
     # --------------------------------------------------
     # Phase 5: Reporting & Metrics

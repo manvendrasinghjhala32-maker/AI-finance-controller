@@ -22,7 +22,7 @@ import {
   Bot
 } from 'lucide-react';
 
-export function BenchmarkEvaluationView({ data, onUploadSuccess, onAskAI }) {
+export function BenchmarkEvaluationView({ data, onUploadSuccess }) {
   const [localData, setLocalData] = useState(null);
   const [filterMode, setFilterMode] = useState('ALL'); // 'ALL' | 'CORRECT' | 'INCORRECT'
   const [searchQuery, setSearchQuery] = useState('');

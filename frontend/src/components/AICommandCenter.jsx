@@ -7,8 +7,11 @@ import {
   Sparkles, 
   FileCheck, 
   Check, 
-  Eye 
+  Eye,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export function AICommandCenter({ 
   selectedTx, 
@@ -19,6 +22,9 @@ export function AICommandCenter({
   onSelectInsight
 }) {
   const [resolving, setResolving] = useState(false);
+  const [aiCache, setAiCache] = useState({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
 
   const handleAction = async (actionType, note) => {
     if (!selectedTx || resolving) return;
@@ -30,8 +36,31 @@ export function AICommandCenter({
     }
   };
 
+  const handleAskAI = async (txId) => {
+    if (!txId) return;
+    if (aiCache[txId]) return;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetch(`/api/ask/transaction/${encodeURIComponent(txId)}`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server error (${res.status})`);
+      }
+      const json = await res.json();
+      setAiCache(prev => ({ ...prev, [txId]: json.reply }));
+    } catch (err) {
+      setAiError(err.message || 'Failed to generate AI explanation.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const deltaVal = selectedTx?.amount_delta || 0;
   const isResolved = selectedTx?.is_resolved;
+  const currentAiReply = selectedTx ? aiCache[selectedTx.transaction_id] : null;
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl flex flex-col h-full overflow-hidden shadow-sm">
@@ -86,21 +115,67 @@ export function AICommandCenter({
         {selectedTx ? (
           <>
             {/* AI Diagnosis Card */}
-            <div className="p-3.5 rounded-lg bg-white border border-gray-200 space-y-1.5 shadow-sm">
+            <div className="p-3.5 rounded-lg bg-white border border-gray-200 space-y-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-semibold tracking-wider uppercase text-blue-700 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
                   Root-Cause Forensics
                 </span>
-                {selectedTx.confidence_score && (
-                  <span className="text-[11px] font-mono text-gray-500">
-                    {selectedTx.confidence_score}% Confidence
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {selectedTx.confidence_score && (
+                    <span className="text-[11px] font-mono text-gray-500">
+                      {selectedTx.confidence_score}% Confidence
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleAskAI(selectedTx.transaction_id)}
+                    disabled={aiLoading}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                    title="Generate isolated AI forensic diagnosis"
+                  >
+                    {aiLoading ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <span>Thinking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3 h-3 text-yellow-300" />
+                        <span>{currentAiReply ? 'AI Diagnosed' : '✨ Ask AI'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-              <p className="text-xs text-gray-700 leading-relaxed font-sans">
-                {selectedTx.ai_explanation || selectedTx.explanation || selectedTx.reason || 'Identified variance between reported banking statement and accounting ledger.'}
-              </p>
+
+              {aiError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                    <span className="truncate">{aiError}</span>
+                  </div>
+                  <button
+                    onClick={() => handleAskAI(selectedTx.transaction_id)}
+                    className="px-2 py-0.5 rounded bg-white hover:bg-rose-100 text-rose-800 text-[10px] font-semibold border border-rose-300 shrink-0"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {currentAiReply ? (
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 shadow-md space-y-2 text-xs animate-fade-in font-sans">
+                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-cyan-400 uppercase tracking-wider mb-1">
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Scoped AI Diagnosis ({selectedTx.transaction_id})</span>
+                  </div>
+                  <MarkdownMessage content={currentAiReply} />
+                </div>
+              ) : (
+                <p className="text-xs text-gray-700 leading-relaxed font-sans">
+                  {selectedTx.ai_explanation || selectedTx.explanation || selectedTx.reason || 'Identified variance between reported banking statement and accounting ledger.'}
+                </p>
+              )}
             </div>
 
             {/* Comparison Grid (3 Cards) */}

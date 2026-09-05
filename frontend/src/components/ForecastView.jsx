@@ -5,12 +5,20 @@ import {
   Calendar, 
   ShieldCheck, 
   ArrowUpRight, 
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export function ForecastView({ onExport }) {
   const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Scoped AI Forecast state & client cache
+  const [aiForecastCache, setAiForecastCache] = useState(null);
+  const [aiForecastLoading, setAiForecastLoading] = useState(false);
+  const [aiForecastError, setAiForecastError] = useState(null);
 
   useEffect(() => {
     fetch('/api/forecast')
@@ -25,6 +33,25 @@ export function ForecastView({ onExport }) {
         setLoading(false);
       });
   }, []);
+
+  const handleAskAIForecast = async () => {
+    if (aiForecastCache) return;
+    setAiForecastLoading(true);
+    setAiForecastError(null);
+    try {
+      const res = await fetch('/api/ask/forecast', { method: 'POST' });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server error (${res.status})`);
+      }
+      const json = await res.json();
+      setAiForecastCache(json.reply);
+    } catch (err) {
+      setAiForecastError(err.message || 'Failed to generate forecast explanation.');
+    } finally {
+      setAiForecastLoading(false);
+    }
+  };
 
   const lastDay = forecast && forecast.length > 0 ? forecast[forecast.length - 1] : null;
   const firstDay = forecast && forecast.length > 0 ? forecast[0] : null;
@@ -61,16 +88,71 @@ export function ForecastView({ onExport }) {
           </p>
         </div>
 
-        {onExport && (
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           <button
-            onClick={() => onExport('forecast')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 transition-colors shadow-sm self-start sm:self-auto cursor-pointer"
+            onClick={handleAskAIForecast}
+            disabled={aiForecastLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition-all shadow-xs cursor-pointer disabled:opacity-50"
+            title="Generate AI forecast driver breakdown"
           >
-            <Download className="w-3.5 h-3.5 text-gray-500" />
-            <span>Export Forecast (CSV)</span>
+            {aiForecastLoading ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Thinking...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                <span>{aiForecastCache ? 'AI Breakdown Active' : '✨ Ask AI Forecast Breakdown'}</span>
+              </>
+            )}
           </button>
-        )}
+
+          {onExport && (
+            <button
+              onClick={() => onExport('forecast')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 transition-colors shadow-sm cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-gray-500" />
+              <span>Export Forecast (CSV)</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* AI Error Notification */}
+      {aiForecastError && (
+        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span className="truncate">{aiForecastError}</span>
+          </div>
+          <button
+            onClick={handleAskAIForecast}
+            className="px-2.5 py-1 rounded bg-white hover:bg-rose-100 text-rose-800 text-xs font-semibold border border-rose-300 shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* AI Forecast Breakdown Panel */}
+      {aiForecastCache && (
+        <div className="p-4 rounded-xl bg-slate-900 border border-slate-700 text-slate-200 shadow-md space-y-2 animate-fade-in font-sans">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-400 uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <span>AI Treasury & Liquidity Driver Analysis</span>
+            </div>
+            <span className="text-[11px] font-mono text-cyan-300 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded">
+              30-Day Model
+            </span>
+          </div>
+          <div className="text-xs sm:text-sm text-slate-200 leading-relaxed font-sans">
+            <MarkdownMessage content={aiForecastCache} />
+          </div>
+        </div>
+      )}
 
       {/* 2. Scenario Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

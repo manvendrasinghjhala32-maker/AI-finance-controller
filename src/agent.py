@@ -28,11 +28,19 @@ from src.config import (
     STATUS_DATE_MISMATCH,
     STATUS_MISSING_INVOICE,
     STATUS_DUPLICATE,
+    STATUS_MULTIPLE_MATCHES,
 )
 
 
+_CLIENT_INSTANCE: Optional[genai.Client] = None
+
+
 def get_client() -> genai.Client:
-    """Create a Gemini client. Raises if no API key is configured."""
+    """Create or return cached Gemini client with persistent connection pooling."""
+    global _CLIENT_INSTANCE
+    if _CLIENT_INSTANCE is not None:
+        return _CLIENT_INSTANCE
+
     from dotenv import load_dotenv
     load_dotenv(override=True)
     api_key = os.getenv("GOOGLE_API_KEY", "") or GOOGLE_API_KEY
@@ -41,7 +49,8 @@ def get_client() -> genai.Client:
             "GOOGLE_API_KEY not set. "
             "Copy .env.example to .env and add your Gemini API key."
         )
-    return genai.Client(api_key=api_key)
+    _CLIENT_INSTANCE = genai.Client(api_key=api_key)
+    return _CLIENT_INSTANCE
 
 
 def generate_gemini_content(
@@ -50,24 +59,18 @@ def generate_gemini_content(
 ) -> str:
     """
     Executes a Gemini content generation call with a multi-model fallback cascade.
-    Tries primary model, then falls back through available active models in case of
-    rate limiting (429), temporary outages (503), or deprecated names (404).
+    Optimized for low-latency response generation (thinking_budget=0) without reducing output size or quality.
     """
-    from dotenv import load_dotenv
-    load_dotenv(override=True)
-
-    primary = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    primary = os.getenv("GEMINI_MODEL", "gemini-3.5-flash") or "gemini-3.5-flash"
     candidates = [
         primary,
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
         "gemini-3.5-flash",
-        "gemini-3.7-flash",
+        "gemini-3-flash-preview",
     ]
     seen = set()
     model_cascade = []
     for c in candidates:
-        if c and c not in seen and c not in ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"):
+        if c and c not in seen:
             seen.add(c)
             model_cascade.append(c)
 
@@ -75,14 +78,34 @@ def generate_gemini_content(
     last_err = None
     for model_name in model_cascade:
         try:
-            call_kwargs = {"model": model_name, "contents": contents}
+            # Build fast configuration with thinking_budget=0 to avoid reasoning latency
             if config is not None:
-                call_kwargs["config"] = config
+                call_config = config
+            else:
+                call_config = types.GenerateContentConfig(temperature=0.2, max_output_tokens=450)
+
+            if getattr(call_config, "thinking_config", None) is None:
+                try:
+                    call_config.thinking_config = types.ThinkingConfig(thinking_budget=0)
+                except Exception:
+                    pass
+
+            call_kwargs = {"model": model_name, "contents": contents, "config": call_config}
             response = client.models.generate_content(**call_kwargs)
             if response and response.text:
                 return response.text.strip()
         except Exception as e:
-            last_err = e
+            # If thinking_budget=0 is unsupported by the specific model, retry without it
+            if "thinking_config" in str(e).lower() or "invalid_argument" in str(e).lower():
+                try:
+                    fallback_cfg = types.GenerateContentConfig(temperature=0.2, max_output_tokens=450)
+                    response = client.models.generate_content(model=model_name, contents=contents, config=fallback_cfg)
+                    if response and response.text:
+                        return response.text.strip()
+                except Exception as inner_e:
+                    last_err = inner_e
+            else:
+                last_err = e
             continue
 
     if last_err:
@@ -566,1161 +589,384 @@ Return ONLY the summary text."""
 
 
 # --------------------------------------------------
-# 6. Autonomous Financial Copilot (Q&A with Data Access)
+# 6. Scoped "Ask AI" Action Intelligence Layer
 # --------------------------------------------------
 
-# Terms that indicate a question is actually about this reconciliation dataset.
-# If a question matches none of these, and doesn't name a specific transaction ID
-# or known merchant, it's treated as off-topic and answered without calling the LLM.
-_DOMAIN_TERMS = (
-    "transaction", "invoice", "vendor", "merchant", "seller", "amount", "date",
-    "duplicate", "match", "exception", "cash", "forecast", "gl", "reconcil",
-    "audit", "summary", "recap", "total", "report", "payment", "bank",
-    "discrepanc", "mismatch", "risk", "overview", "batch", "record", "status",
-    "how many", "how much", "runway", "ledger", "journal", "clean",
-)
-
-# Common greetings / small talk that deserve a friendly reply, not a data dump
-# and not an "I can't help with that" decline either.
-_GREETING_PATTERNS = (
-    "hi", "hii", "hiii", "hello", "hey", "heyy", "yo", "sup",
-    "good morning", "good afternoon", "good evening", "howdy",
-    "thanks", "thank you", "thx", "ok", "okay", "cool", "great", "nice",
-)
-
-
-def _normalize_query(question: str) -> str:
-    return question.strip().lower().strip("!?. ")
-
-
-def _is_greeting_or_smalltalk(question: str) -> bool:
-    """True for bare greetings/acknowledgements with no real content, e.g. 'hi', 'thanks'."""
-    q = _normalize_query(question)
-    if not q:
-        return True
-    # Only treat it as pure small talk if it's short and matches a known pattern
-    # almost exactly — this must never accidentally swallow a real question like
-    # "hey, why is TX0004 flagged?" (that contains domain terms, handled separately).
-    if len(q.split()) <= 3 and any(q == p or q.startswith(p) for p in _GREETING_PATTERNS):
-        if not any(term in q for term in _DOMAIN_TERMS):
-            return True
-    return False
-
-
-def _mentions_specific_entity(question: str, results: List["ReconciliationResult"], bank_df) -> bool:
-    """True if the question names a specific transaction ID or a known merchant/vendor."""
-    q_upper = question.upper()
-    if any(r.transaction_id.upper() in q_upper for r in results):
-        return True
-    if bank_df is not None and "description" in bank_df.columns:
-        for m in bank_df["description"].dropna().unique():
-            if isinstance(m, str) and len(m) >= 3 and m.lower() in question.lower():
-                return True
-    return False
-
-
-def _is_offtopic_query(question: str, results: List["ReconciliationResult"], bank_df) -> bool:
-    """True if the question has nothing to do with this reconciliation dataset."""
-    q = _normalize_query(question)
-    if not q:
-        return False  # empty handled by greeting check
-    if _mentions_specific_entity(question, results, bank_df):
-        return False
-    return not any(term in q for term in _DOMAIN_TERMS)
-
-
-def _is_vague_followup(question: str) -> bool:
-    """True for short, conversational follow-ups like 'so what about this one', 'why though', 'go on'."""
-    q = _normalize_query(question)
-    if not q:
-        return False
-    off_markers = (
-        "sky", "football", "match", "weather", "recipe", "song", "joke",
-        "capital of", "prime minister", "president", "movie", "poem", "react",
-        "website", "life", "haiku", "ocean",
-    )
-    if any(m in q for m in off_markers):
-        return False
-    vague_phrases = (
-        "this one", "what about this", "what about that", "what about", "why though",
-        "go on", "tell me more", "continue", "how do i fix", "how to fix",
-        "how do i resolve", "how to resolve", "what next", "what else",
-        "and then", "so what", "fix it", "how come", "details",
-        "what do i do", "what should i do", "how do we fix", "keep going",
-        "more info", "elaborate",
-    )
-    if any(p in q for p in vague_phrases):
-        return True
-    words = q.split()
-    if len(words) <= 3 and q in ("why", "how", "next", "and", "more", "continue"):
-        return True
-    if len(words) <= 4 and any(w in words for w in ["this", "that", "it"]) and any(w in words for w in ["why", "how", "what", "fix", "resolve"]):
-        return True
-    return False
-
-
-def _is_generic_summary_query(question: str, results: List["ReconciliationResult"], bank_df) -> bool:
-    """True for broad questions ('overall summary', 'how many exceptions') with no
-    specific transaction/vendor named — these should use the aggregate numbers,
-    never a single-transaction deep dive."""
-    q = _normalize_query(question)
-    if _mentions_specific_entity(question, results, bank_df):
-        return False
-    if any(k in q for k in ["duplicate", "missing", "fee", "variance", "date"]):
-        return False
-    generic_terms = ("overall", "summary", "recap", "total", "how many", "how much",
-                      "status", "overview", "big picture", "high level")
-    return any(term in q for term in generic_terms)
-
-
-def _greeting_reply() -> str:
-    return (
-        "Hey! I'm here to help with this reconciliation batch. You can ask me things like "
-        "\"why is TX0004 flagged?\", \"give me the overall summary\", or ask about a specific "
-        "vendor. What would you like to know?"
-    )
-
-
-def _offtopic_reply() -> str:
-    return (
-        "⚠️ **Query Not Related to Dataset or Results**\n\n"
-        "That's outside what I can help with here — I'm scoped strictly to this reconciliation dataset "
-        "(transactions, invoices, payments, mismatches, and cash forecasting). "
-        "Please ask a genuine or related question about our financial data, such as "
-        "\"why is TX0004 flagged?\" or \"give me the overall summary.\""
-    )
-
-
-def _deterministic_overall_summary(
-    results: List["ReconciliationResult"],
-    status_counts: Dict[str, int],
-) -> str:
-    """A short, human, aggregate-only summary. Used both as the LLM fallback and as
-    the direct answer for generic summary questions, so a vague question can never
-    fixate on one transaction."""
-    total = len(results)
-    clean = status_counts.get(STATUS_MATCH, 0)
-    dupes = status_counts.get(STATUS_DUPLICATE, 0)
-    exceptions = total - clean - dupes
-    amt = status_counts.get(STATUS_AMOUNT_MISMATCH, 0)
-    date = status_counts.get(STATUS_DATE_MISMATCH, 0)
-    missing = status_counts.get(STATUS_MISSING_INVOICE, 0)
-
-    lines = [
-        f"Here's the overall picture: out of **{total} transactions**, **{clean} matched cleanly**"
-        + (f" and **{dupes} were duplicates** we isolated" if dupes else "")
-        + f", leaving **{exceptions} that need a look**."
-    ]
-    parts = []
-    if amt:
-        parts.append(f"{amt} with amount differences")
-    if date:
-        parts.append(f"{date} with date differences")
-    if missing:
-        parts.append(f"{missing} missing an invoice")
-    if parts:
-        lines.append("That breaks down to " + ", ".join(parts) + ".")
-    lines.append(
-        "You can ask about any specific transaction (e.g. \"what's up with TX0004?\"), "
-        "a vendor, or head to the Exception Ledger tab to work through them one by one."
-    )
-    return " ".join(lines)
-
-
-def ask_question(
-    question: str,
+def explain_transaction(
+    transaction_id: str,
     results: List[ReconciliationResult],
+    bank: Optional[pd.DataFrame] = None,
+    invoices: Optional[pd.DataFrame] = None,
+    payments: Optional[pd.DataFrame] = None,
     bank_df: Optional[pd.DataFrame] = None,
     invoices_df: Optional[pd.DataFrame] = None,
     payments_df: Optional[pd.DataFrame] = None,
-    metrics: Optional[Dict[str, Any]] = None,
-    history: Optional[List[Dict[str, str]]] = None,
-    resolved_overrides: Optional[Dict[str, Dict[str, Any]]] = None,
-    focused_transaction_id: Optional[str] = None,
     verbose: bool = True,
 ) -> str:
     """
-    Autonomous financial reasoning copilot capable of multi-table cross-referencing,
-    merchant exposure aggregation, benchmark accuracy audit, and risk evaluation.
+    Explains why a specific transaction was classified with its status and what
+    the controller should do about it.
+    Sends ONLY that single transaction's bank, invoice, payment, and classification slice.
     """
-    import re
-    from src.guardrails import FinancialGuardrailEngine
+    if bank is None and bank_df is not None:
+        bank = bank_df
+    if invoices is None and invoices_df is not None:
+        invoices = invoices_df
+    if payments is None and payments_df is not None:
+        payments = payments_df
 
-    status_counts = {}
+    if not transaction_id or not str(transaction_id).strip():
+        raise ValueError("Transaction ID cannot be empty.")
+
+    target_res = None
+    target_id_norm = str(transaction_id).strip().upper().replace("-", "").replace("_", "")
     for r in results:
-        status_counts[r.status] = status_counts.get(r.status, 0) + 1
+        r_norm = str(r.transaction_id).strip().upper().replace("-", "").replace("_", "")
+        if r_norm == target_id_norm or str(r.transaction_id).strip().upper() == str(transaction_id).strip().upper():
+            target_res = r
+            break
 
-    # Prepare flat records for guardrail entity resolution
-    all_records = []
-    bank_dict = {}
-    if bank_df is not None and "transaction_id" in bank_df.columns:
-        for _, b_row in bank_df.iterrows():
-            bank_dict[str(b_row["transaction_id"]).strip().upper()] = b_row
+    if target_res is None:
+        raise ValueError(f"Transaction ID '{transaction_id}' does not exist in the active reconciliation batch.")
 
-    for r in results:
-        tx_id = str(r.transaction_id).strip()
-        b_row = bank_dict.get(tx_id.upper())
-        b_amt = float(b_row["amount"]) if b_row is not None and "amount" in b_row else 0.0
-        vendor = str(b_row["description"]) if b_row is not None and "description" in b_row else ""
-        all_records.append({
-            "transaction_id": tx_id,
-            "invoice_id": r.invoice_id or "",
-            "bank_amount": b_amt,
-            "vendor": vendor,
-            "status": r.status,
-            "reason": r.reason,
-            "amount_delta": r.amount_delta,
-            "date_delta_days": r.date_delta_days,
-            "merchant_match_score": r.merchant_match_score,
-            "payment_status": getattr(r, "payment_status", "N/A"),
-        })
+    # Slice ONLY this transaction's records
+    actual_tx_id = target_res.transaction_id
+    b_row = {}
+    if bank is not None and "transaction_id" in bank.columns:
+        match_b = bank[bank["transaction_id"].astype(str).str.strip().str.upper() == str(actual_tx_id).strip().upper()]
+        if len(match_b) > 0:
+            b_row = match_b.iloc[0].to_dict()
 
-    # 1. Safety check
-    is_safe, safety_msg = FinancialGuardrailEngine.check_input_safety(question)
-    if not is_safe and safety_msg:
-        return safety_msg
+    i_row = {}
+    if invoices is not None and len(invoices) > 0 and target_res.invoice_id:
+        if "invoice_id" in invoices.columns:
+            match_i = invoices[invoices["invoice_id"].astype(str).str.strip().str.upper() == str(target_res.invoice_id).strip().upper()]
+            if len(match_i) > 0:
+                i_row = match_i.iloc[0].to_dict()
 
-    # 2. Greeting / Small talk check
-    if _is_greeting_or_smalltalk(question):
-        return _greeting_reply()
+    p_row = {}
+    if payments is not None and len(payments) > 0:
+        pay_id = getattr(target_res, "payment_id", None)
+        if pay_id and "payment_id" in payments.columns:
+            match_p = payments[payments["payment_id"].astype(str).str.strip().str.upper() == str(pay_id).strip().upper()]
+            if len(match_p) > 0:
+                p_row = match_p.iloc[0].to_dict()
+        elif "reference" in payments.columns and b_row.get("reference"):
+            match_p = payments[payments["reference"].astype(str).str.strip().str.upper() == str(b_row.get("reference")).strip().upper()]
+            if len(match_p) > 0:
+                p_row = match_p.iloc[0].to_dict()
 
-    # 3. Extract entity references (handles direct mention, focused_transaction_id, and history anaphora)
-    entity_info = FinancialGuardrailEngine.extract_entity_references(
-        question, all_records, focused_tx_id=focused_transaction_id, history=history
-    )
+    b_amt = float(b_row.get("amount", 0.0))
+    b_date = str(b_row.get("date", "N/A"))
+    b_desc = str(b_row.get("description", b_row.get("vendor", "Counterparty")))
+    b_ref = str(b_row.get("reference", "N/A"))
 
-    # 4. Check for non-existent transaction IDs (Ledger Grounding Guardrail)
-    tx_candidates = re.findall(r"\b(?:TX|TRX|BL|TXN)[-_]?\d+[A-Z]?\b", question, re.IGNORECASE)
-    for cand in tx_candidates:
-        cand_norm = cand.upper().replace("-", "").replace("_", "")
-        exists = any(cand_norm == r["transaction_id"].upper().replace("-", "").replace("_", "") for r in all_records)
-        if not exists:
-            return f"🛡️ **Ledger Grounding Guardrail**: Transaction ID `{cand}` does not exist in the active reconciliation batch. Please verify the transaction reference number from the Exception Ledger."
+    i_id = target_res.invoice_id or i_row.get("invoice_id") or "None"
+    i_amt = float(i_row.get("amount", 0.0)) if i_row.get("amount") is not None else None
+    i_date = str(i_row.get("date", "N/A")) if i_row.get("date") is not None else None
+    i_cust = str(i_row.get("customer", i_row.get("client", "N/A"))) if i_row.get("customer") or i_row.get("client") else None
 
-    q_lower = question.lower().strip()
-    is_vague = _is_vague_followup(question)
-    is_specific = (
-        entity_info["is_specific_tx_query"]
-        or bool(entity_info["matched_records"])
-        or bool(entity_info["referenced_tx_ids"])
-    )
+    p_status = target_res.payment_status or p_row.get("status", "unknown")
 
-    # 5. Fast-path deterministic routing for generic queries (when NO specific transaction is targeted and NOT a vague follow-up)
-    if not is_specific and not is_vague:
-        if (
-            _is_generic_summary_query(question, results, bank_df)
-            or any(term in q_lower for term in ["overall", "summary", "total summary", "overview", "total number of records"])
-        ) and not any(k in q_lower for k in ["duplicate", "missing", "fee", "variance", "date"]):
-            clean_count = status_counts.get(STATUS_MATCH, 0)
-            dup_count = status_counts.get(STATUS_DUPLICATE, 0)
-            clean_total = len(results) - dup_count
-            rate = round((clean_count / clean_total * 100), 1) if clean_total > 0 else 0.0
-            exceptions_count = clean_total - clean_count
-            return (
-                f"### 📊 Reconciliation Batch Overview & Portfolio Health Assessment\n\n"
-                f"> **Executive Summary**: The autonomous financial intelligence engine has completed multi-source verification across banking feeds, clearing settlements, and billing ledgers. Out of **{len(results)} total ingested records**, the portfolio demonstrates a solid **{rate}% clean match rate** with isolated friction points in gateway interchange fees and transit clearing intervals.\n\n"
-                f"#### 📈 Enterprise Reconciliation Ledger Snapshot\n"
-                f"| Portfolio Metric | Record Count | Proportional Share (%) | Operational Significance & Controller Stance |\n"
-                f"|---|---|---|---|\n"
-                f"| **Clean Matches** | **{clean_count}** | {rate}% | Verified 1:1 settlements ready for automated journal posting |\n"
-                f"| **Active Discrepancies (Exceptions)** | **{exceptions_count}** | {100.0 - rate:.1f}% | Variances requiring root-cause triage and journal adjustment |\n"
-                f"| **Duplicate Entries Quarantined** | **{dup_count}** | - | Redundant transactions isolated to protect cash balance integrity |\n"
-                f"| **Total Records Processed** | **{len(results)}** | 100.0% | Complete ingestion footprint across all data sources |\n\n"
-                f"#### 💡 Strategic CFO Insights & Health Indicators\n"
-                f"- **Working Capital Integrity**: Automated duplicate quarantine prevented accidental duplicate vendor disbursements and phantom cash inflation.\n"
-                f"- **Fee Drag Exposure**: Discrepancies are predominantly driven by merchant gateway interchange deductions (2–3%), which can be bundled into monthly expense journals rather than treated as unresolvable errors.\n"
-                f"- **Recommended Controller Next Steps**: Navigate to the **Variance Ledger** to review prioritized items or explore the **30-Day Liquidity Forecast** to evaluate working capital runway."
-            )
-        if any(k in q_lower for k in ["date difference", "date differences", "date mismatch", "date mismatches", "date drift", "all date", "all dates", "timing difference", "timing differences", "timing drift"]):
-            date_records = [r for r in all_records if r["status"] == STATUS_DATE_MISMATCH]
-            if not date_records:
-                return (
-                    f"### ⏳ Forensic Ledger Audit: Date Differences & Timing Status (0 Active Exceptions)\n\n"
-                    f"> **Operational Timing Status**: There are currently **0 date mismatch exceptions** under the active reconciliation rules. All transactions with minor timing offsets have cleared within the configured date tolerance window and are verified as clean matches.\n\n"
-                    f"#### 💡 Strategic Controller Insights\n"
-                    f"- **Settlement Window Alignment**: Inbound bank receipts aligned with billing dates within the acceptable clearing window.\n"
-                    f"- **Tolerance Setting**: If you want to audit stricter multi-day clearing intervals, adjust the **Date Tolerance** slider in the Control Bar to `1 Day` or `0 Days` and re-run reconciliation."
-                )
-
-            total_date_amt = sum(r["bank_amount"] for r in date_records)
-            rows_md = []
-            for r in date_records:
-                tx = r["transaction_id"]
-                inv = r["invoice_id"] or "N/A"
-                v = r["vendor"] or "Enterprise Counterparty"
-                amt = r["bank_amount"]
-                days = abs(r["date_delta_days"] or 2)
-                reason = r["reason"] or f"{days}-day transit settlement offset between billing ledger and bank clearance"
-                rows_md.append(f"| `{tx}` | `{inv}` | **{v}** | ₹{amt:,.2f} | **+{days} Days** | {reason} |")
-                
-            table_content = "\n".join(rows_md)
-            
-            return (
-                f"### ⏳ Forensic Ledger Audit: Date Differences & Timing Discrepancies ({len(date_records)} Records)\n\n"
-                f"> **Operational Timing Overview**: The reconciliation engine identified **{len(date_records)} transactions** (totaling **₹{total_date_amt:,.2f}**) with multi-day timing discrepancies between invoice issuance in ERP billing ledgers and clearance into banking feeds. All records reflect standard **T+2 clearing transit intervals** across financial networks.\n\n"
-                f"#### 📊 Itemized Date Difference & Timing Drift Ledger\n"
-                f"| Transaction ID | Matched Invoice | Counterparty / Vendor | Cleared Amount (₹) | Timing Offset | Root-Cause & Clearing Diagnosis |\n"
-                f"|---|---|---|---|---|---|\n"
-                f"{table_content}\n\n"
-                f"#### 🔬 Key Financial & Working Capital Insights\n"
-                f"- **Zero Cash Loss Exposure**: Unlike gateway fee variances, date drift transactions carry **₹0.00 cash leakage**; 100% of the invoiced principal cleared into treasury accounts.\n"
-                f"- **Transit Velocity Analysis**: The uniform +2-day drift stems from standard interbank clearinghouse settlement cycles (NEFT/RTGS batch cutoffs and weekend settlement holds).\n"
-                f"- **Automated ERP Configuration**: Configure a **3-day tolerance band** in the reconciliation rule engine so standard clearing offsets are cleared automatically without manual controller triage.\n"
-                f"- **Accounting Treatment**: Post timing reclassification adjusting entries (`GL-1010 Operating Cash` vs `GL-1200 A/R Timing Reclass`) to ensure strict period-end accounting cutoff compliance."
-            )
-
-        if any(k in q_lower for k in ["amount mismatch", "amount mismatches", "amount difference", "amount differences", "all variance", "all variances", "fee variance", "fee variances", "all amount", "all fees", "gateway fees", "fee drag"]):
-            amt_records = [r for r in all_records if r["status"] == STATUS_AMOUNT_MISMATCH]
-            if not amt_records:
-                return (
-                    f"### 💸 Forensic Ledger Audit: Amount Mismatches & Fee Variances (0 Active Exceptions)\n\n"
-                    f"> **Revenue Integrity Status**: There are currently **0 amount mismatch exceptions** under active tolerance rules. All transaction amounts match gross invoices within configured limits."
-                )
-
-            total_bank_amt = sum(r["bank_amount"] for r in amt_records)
-            total_var = sum(abs(r["amount_delta"] or 0) for r in amt_records)
-            
-            rows_md = []
-            for r in amt_records:
-                tx = r["transaction_id"]
-                inv = r["invoice_id"] or "N/A"
-                v = r["vendor"] or "Enterprise Counterparty"
-                b_amt = r["bank_amount"]
-                delta = abs(r["amount_delta"] or 0)
-                inv_amt = b_amt + delta
-                pct = (delta / inv_amt * 100) if inv_amt > 0 else 2.5
-                reason = r["reason"] or f"Gateway interchange processing deduction of ₹{delta:,.2f}"
-                rows_md.append(f"| `{tx}` | `{inv}` | **{v}** | ₹{b_amt:,.2f} | ₹{inv_amt:,.2f} | **₹{delta:,.2f}** | {pct:.1f}% | {reason} |")
-                
-            table_content = "\n".join(rows_md)
-            
-            return (
-                f"### 💸 Forensic Ledger Audit: Amount Mismatches & Fee Variances ({len(amt_records)} Records)\n\n"
-                f"> **Executive Revenue & Fee Brief**: Identified **{len(amt_records)} transactions** exhibiting amount variances totaling **₹{total_var:,.2f}** across **₹{total_bank_amt:,.2f}** in net banking intake. These variances are driven by automated merchant gateway interchange and processing toll deductions (~2.0%–2.5%) applied at point of capture.\n\n"
-                f"#### 📊 Itemized Amount Discrepancies & Fee Drag Ledger\n"
-                f"| Transaction ID | Matched Invoice | Counterparty / Vendor | Cleared Bank (₹) | Expected Gross (₹) | Fee Drag / Delta (₹) | Fee % | Root-Cause Forensic Diagnosis |\n"
-                f"|---|---|---|---|---|---|---|---|\n"
-                f"{table_content}\n\n"
-                f"#### 💡 Strategic CFO Advisory & Action Plan\n"
-                f"- **Gross Margin Integrity**: Interchange deductions averaging ~2.5% represent legitimate cost of collection rather than uncollectible bad debt.\n"
-                f"- **Recommended Controller Resolution**: Reclassify cumulative variance (**₹{total_var:,.2f}**) in batch by debiting `GL-6150 (Bank & Gateway Fees)` and crediting `GL-1200 (Accounts Receivable)` to balance open customer ledgers.\n"
-                f"- **Processor Tier Negotiation**: Enterprise volume qualifies for tiered interchange concessions; renegotiating merchant agreements can recover 30–50 bps annually."
-            )
-
-        if any(k in q_lower for k in ["duplicate", "duplicates"]):
-            dup_records = [r for r in all_records if r["status"] == STATUS_DUPLICATE]
-            if not dup_records:
-                return (
-                    f"### 🛡️ Forensic Ledger Audit: Quarantined Duplicate Transactions (0 Records)\n\n"
-                    f"> **Integrity & Compliance Brief**: Zero duplicate records detected in the active reconciliation batch. Cash balance integrity is intact."
-                )
-
-            total_dup_amt = sum(r["bank_amount"] for r in dup_records)
-            rows_md = []
-            for r in dup_records:
-                tx = r["transaction_id"]
-                parent_tx = tx.replace("_DUP", "").replace("_dup", "")
-                v = r["vendor"] or "Banking Counterparty"
-                amt = r["bank_amount"]
-                reason = r["reason"] or f"Duplicate bank statement export of primary record `{parent_tx}`"
-                rows_md.append(f"| `{tx}` | `{parent_tx}` | **{v}** | ₹{amt:,.2f} | `GL-1190` | {reason} |")
-                
-            table_content = "\n".join(rows_md)
-            
-            return (
-                f"### 🛡️ Forensic Ledger Audit: Quarantined Duplicate Transactions ({len(dup_records)} Records)\n\n"
-                f"> **Integrity & Compliance Alert**: The reconciliation engine identified and quarantined **{len(dup_records)} duplicate records** totaling **₹{total_dup_amt:,.2f}** in the banking feed, protecting the general ledger against double-counting and phantom cash inflation.\n\n"
-                f"#### 📊 Itemized Quarantined Duplicate Transactions Ledger\n"
-                f"| Duplicate Transaction ID | Primary Source Reference | Counterparty / Vendor | Duplicate Amount (₹) | Quarantine GL Account | Root Cause & Isolation Mechanism |\n"
-                f"|---|---|---|---|---|---|\n"
-                f"{table_content}\n\n"
-                f"#### 🔒 Risk Mitigation & Systemic Safeguards\n"
-                f"- **Cash Distortions Prevented**: Isolating these {len(dup_records)} records prevented accidental duplicate vendor disbursements and overstatement of operating cash.\n"
-                f"- **Systemic Prevention Playbook**: Configure cryptographic SHA-256 idempotency hashing on all inbound banking exports so duplicate batches are caught at the gateway boundary before entering reconciliation."
-            )
-
-        if any(k in q_lower for k in ["missing invoice", "missing invoices", "unbilled", "unapplied cash"]):
-            missing_records = [r for r in all_records if r["status"] == STATUS_MISSING_INVOICE]
-            if not missing_records:
-                return (
-                    f"### 📑 Forensic Ledger Audit: Missing Invoices & Unbilled Deposits (0 Records)\n\n"
-                    f"> **Revenue & Billing Status**: 100% of cleared bank receipts match open invoices in the ERP. Zero unbilled deposits in suspense."
-                )
-
-            total_missing_amt = sum(r["bank_amount"] for r in missing_records)
-            rows_md = []
-            for r in missing_records:
-                tx = r["transaction_id"]
-                v = r["vendor"] or "Deposit Source"
-                amt = r["bank_amount"]
-                rows_md.append(f"| `{tx}` | **{v}** | ₹{amt:,.2f} | `GL-2250 (Suspense)` | Dispatch billing follow-up to Accounts Payable / Sales |")
-                
-            table_content = "\n".join(rows_md)
-            
-            return (
-                f"### 📑 Forensic Ledger Audit: Missing Invoices & Unbilled Deposits ({len(missing_records)} Records)\n\n"
-                f"> **Revenue & Billing Alert**: Identified **{len(missing_records)} unbilled deposits** totaling **₹{total_missing_amt:,.2f}** where bank receipts successfully cleared into company treasury, but no corresponding accounts receivable invoice exists in the ERP.\n\n"
-                f"#### 📊 Itemized Unbilled Bank Deposits Ledger\n"
-                f"| Transaction ID | Counterparty / Source Entity | Cleared Bank Amount (₹) | Parking GL Account | Recommended Controller Action |\n"
-                f"|---|---|---|---|---|\n"
-                f"{table_content}\n\n"
-                f"#### 💰 Financial Exposure & Cash Flow Mechanics\n"
-                f"- **Unapplied Cash Impact**: Unbilled deposits represent cash received that cannot be matched against open receivables, creating an unallocated suspense accumulation in `GL-2250`.\n"
-                f"- **Controller Action Plan**: Dispatch automated billing follow-up notifications to Accounts Payable and procurement teams to register formal sales invoices.\n"
-                f"- **Accounting Treatment**: Park cash inflows temporarily in `GL-2250 (Unapplied Receipts / Suspense)` to maintain clean audit trails without premature revenue recognition."
-            )
-
-        if any(k in q_lower for k in ["all exception", "all exceptions", "all discrepancy", "all discrepancies", "list exceptions", "show exceptions", "list all issues", "show all issues", "all errors", "list errors"]):
-            excs = [r for r in all_records if r["status"] not in (STATUS_MATCH, STATUS_DUPLICATE)]
-            if not excs:
-                return (
-                    f"### 📋 Comprehensive Exception Ledger: All Active Discrepancies (0 Records)\n\n"
-                    f"> **Batch Status**: No active discrepancies identified. 100% of transactions are fully reconciled."
-                )
-
-            total_exc_amt = sum(r["bank_amount"] for r in excs)
-            amt_count = sum(1 for r in excs if r["status"] == STATUS_AMOUNT_MISMATCH)
-            date_count = sum(1 for r in excs if r["status"] == STATUS_DATE_MISMATCH)
-            missing_count = sum(1 for r in excs if r["status"] == STATUS_MISSING_INVOICE)
-            
-            rows_md = []
-            for r in excs:
-                tx = r["transaction_id"]
-                inv = r["invoice_id"] or "N/A"
-                v = r["vendor"] or "Enterprise Counterparty"
-                amt = r["bank_amount"]
-                st = r["status"]
-                delta = abs(r["amount_delta"] or 0)
-                var_str = f"₹{delta:,.2f}" if delta > 0 else "-"
-                days = abs(r["date_delta_days"] or 0)
-                drift_str = f"+{days}d" if days > 0 else "-"
-                reason = r["reason"] or st
-                rows_md.append(f"| `{tx}` | `{inv}` | **{v}** | ₹{amt:,.2f} | **{st}** | {var_str} | {drift_str} | {reason} |")
-                
-            table_content = "\n".join(rows_md)
-            
-            return (
-                f"### 📋 Comprehensive Exception Ledger: All Active Discrepancies ({len(excs)} Records)\n\n"
-                f"> **Batch Exception Diagnostic**: Across the active reconciliation portfolio, **{len(excs)} exception transactions** (totaling **₹{total_exc_amt:,.2f}**) require controller attention across Amount Mismatches ({amt_count}), Date Drift ({date_count}), and Missing Invoices ({missing_count}).\n\n"
-                f"#### 📊 Complete Itemized Discrepancy Ledger\n"
-                f"| Transaction ID | Matched Invoice | Counterparty / Vendor | Cleared Bank (₹) | Exception Class | Amount Variance | Date Drift | Diagnostic Root Cause |\n"
-                f"|---|---|---|---|---|---|---|---|\n"
-                f"{table_content}\n\n"
-                f"#### 🎯 Prioritized Controller Action Protocol\n"
-                f"1. **Clear Unbilled Deposits ({missing_count} items)**: Park in `GL-2250` and request sales invoices.\n"
-                f"2. **Book Processing Fee JVs ({amt_count} items)**: Debit `GL-6150 (Gateway Fees)` to clear open receivables.\n"
-                f"3. **Authorize Timing Tolerances ({date_count} items)**: Apply 3-day window rule for automated approval."
-            )
-
-    # 6. Vague Conversational Follow-up Resolution (e.g. "so what about this one", "why though", "go on")
-    if is_vague and not entity_info["matched_records"]:
-        target_rec = None
-        if history:
-            for turn in reversed(history):
-                content = str(turn.get("content", ""))
-                hist_ids = re.findall(r"\b(?:TX|TRX|BL|TXN)[-_]?\d+[A-Z]?\b", content, re.IGNORECASE)
-                for hid in hist_ids:
-                    hid_norm = hid.upper().replace("-", "").replace("_", "")
-                    for r in all_records:
-                        if hid_norm == r["transaction_id"].upper().replace("-", "").replace("_", ""):
-                            target_rec = r
-                            break
-                    if target_rec:
-                        break
-                if target_rec:
-                    break
-
-        if not target_rec:
-            # Cold-start fallback: pick the primary active exception
-            candidate_mismatches = [r for r in all_records if r["status"] == STATUS_AMOUNT_MISMATCH]
-            candidate_exceptions = [
-                r for r in all_records
-                if r["status"] in (STATUS_AMOUNT_MISMATCH, STATUS_DATE_MISMATCH, STATUS_MISSING_INVOICE)
-            ]
-            target_rec = (
-                candidate_mismatches[0]
-                if candidate_mismatches
-                else (candidate_exceptions[0] if candidate_exceptions else (all_records[0] if all_records else None))
-            )
-
-        if target_rec:
-            entity_info["matched_records"] = [target_rec]
-            entity_info["referenced_tx_ids"] = [target_rec["transaction_id"]]
-            is_specific = True
-
-    # 7. Dataset Relevance & Off-Topic Check (only if NOT specific, NOT focused, and NOT vague follow-up)
-    has_focused = bool(focused_transaction_id) or bool(entity_info["matched_records"])
-    if not has_focused and not is_vague:
-        is_relevant, relevance_reply = FinancialGuardrailEngine.verify_dataset_relevance(
-            question, all_records, has_focused_tx=False, history=history
-        )
-        if not is_relevant:
-            return _offtopic_reply()
-
-    # 8. Specific transaction intent handling (Non-Repetitive & Intent-Adaptive)
-    if is_specific and entity_info["matched_records"]:
-        target = entity_info["matched_records"][0]
-        tx_id = target["transaction_id"]
-        vendor = target["vendor"] or "Customer"
-        bank_amt = target["bank_amount"]
-        delta = abs(target["amount_delta"] or 0)
-        status = target["status"]
-        reason = target["reason"]
-        fee_pct = (delta / (bank_amt + delta) * 100) if (bank_amt + delta) > 0 else 2.5
-        inv_amt = bank_amt + delta if delta else bank_amt
-
-        intent = FinancialGuardrailEngine.classify_intent(question, has_focused_tx=True)
-
-        # Logical advancement for continuation queries ("go on", "continue", "next", "tell me more")
-        is_continuation = any(p in q_lower for p in ["go on", "continue", "next", "tell me more", "what next", "keep going", "and then", "elaborate"])
-        if is_continuation:
-            last_assistant_msg = ""
-            if history:
-                for turn in reversed(history):
-                    if turn.get("role") == "assistant":
-                        last_assistant_msg = turn.get("content", "")
-                        break
-
-            if "Strategic Remediation Playbook" in last_assistant_msg or "Remediation" in last_assistant_msg or "Action Plan" in last_assistant_msg:
-                intent = "JOURNAL_ENTRY"
-            elif "Balanced General Ledger Adjusting Entry" in last_assistant_msg or "Double-Entry" in last_assistant_msg or "GL-1010" in last_assistant_msg:
-                intent = "RISK_AUDIT"
-            elif "Forensic Root Cause Investigation" in last_assistant_msg or "Money Flow Story" in last_assistant_msg:
-                intent = "RESOLUTION_ACTION"
-            elif "Forensic Audit Dossier" in last_assistant_msg:
-                intent = "ROOT_CAUSE"
-            else:
-                intent = "ROOT_CAUSE"
-
-        if intent == "TRANSACTION_DETAIL":
-            inv_str = target.get("invoice_id") or "Unmatched / Missing"
-            delta_str = f"₹{delta:,.2f} ({fee_pct:.1f}%)" if delta else "₹0.00"
-            return (
-                f"### 📋 Forensic Audit Dossier: `{tx_id}`\n\n"
-                f"> **Transaction Profile**: Reference `{tx_id}` associated with counterparty **{vendor}** cleared at **₹{bank_amt:,.2f}** in the operating bank feed with classification **{status}**.\n\n"
-                f"#### 📊 Core Transaction Parameters\n"
-                f"| Ledger Dimension | Value / Parameter | Audit Significance |\n"
-                f"|---|---|---|\n"
-                f"| **Transaction Reference** | `{tx_id}` | Primary banking intake key |\n"
-                f"| **Counterparty / Vendor** | **{vendor}** | Counterparty on bank statement |\n"
-                f"| **Matched Invoice** | `{inv_str}` | ERP accounts receivable billing record |\n"
-                f"| **Cleared Bank Intake** | **₹{bank_amt:,.2f}** | Net liquid cash deposited |\n"
-                f"| **Reconciliation Status** | **{status}** | Operational exception classification |\n"
-                f"| **Fee Drag / Delta** | **{delta_str}** | Variance between bank and invoice |\n"
-                f"| **Forensic Diagnosis** | {reason} | Primary exception root cause |\n\n"
-                f"#### 🎯 Recommended Controller Actions\n"
-                f"- Ask *\"why though?\"* to investigate the underlying root cause and fee deduction mechanics.\n"
-                f"- Ask *\"how do I fix it?\"* to view the step-by-step remediation action plan.\n"
-                f"- Ask *\"show journal entry\"* to generate balanced double-entry GL adjustment entries."
-            )
-        elif intent == "ROOT_CAUSE":
-            return (
-                f"### 🔍 Deep-Dive Forensic Root Cause Investigation: `{tx_id}`\n\n"
-                f"> **Executive Summary**: Transaction `{tx_id}` involving counterparty **{vendor}** cleared at **₹{bank_amt:,.2f}** against an expected invoice total, producing a **₹{delta:,.2f} ({fee_pct:.1f}%) variance** classified as **{status}**.\n\n"
-                f"#### 📖 The Money Flow Story\n"
-                f"When **{vendor}** finalized this transaction, the payment cleared through an intermediary gateway clearinghouse. Rather than transmitting gross settlement funds, the processor automatically deducted an interchange and processing toll fee of **₹{delta:,.2f}** at the point of capture. Consequently, the operating account received net funds of ₹{bank_amt:,.2f}, creating an open balance against the gross billing invoice.\n\n"
-                f"#### 📊 Multi-Factor Forensic Breakdown\n"
-                f"| Audit Dimension | Value / Parameter | Operational Significance |\n"
-                f"|---|---|---|\n"
-                f"| **Transaction Reference** | `{tx_id}` | Primary reconciliation trace key |\n"
-                f"| **Counterparty / Vendor** | **{vendor}** | Counterparty entity on bank feed |\n"
-                f"| **Cleared Bank Intake** | **₹{bank_amt:,.2f}** | Net liquid cash received into operating account |\n"
-                f"| **Discrepancy Category** | **{status}** | Primary accounting variance classification |\n"
-                f"| **Fee Drag (Variance Delta)** | **₹{delta:,.2f}** ({fee_pct:.1f}%) | Payment processor interchange & service fee |\n"
-                f"| **Forensic Diagnosis** | {reason} | Verified root-cause forensic finding |\n\n"
-                f"#### 💡 Strategic CFO Advisory & Working Capital Impact\n"
-                f"- **Annualized Fee Drag**: If deductions of ~{fee_pct:.1f}% repeat across high-volume settlements with {vendor}, annual fee drag can erode operating margins by several percentage points.\n"
-                f"- **Processor Tier Optimization**: Enterprise accounts clearing substantial monthly volume can negotiate interchange concessions of 30–50 basis points with payment processors.\n"
-                f"- **Autonomous Matching Rule**: Configure an autonomous tolerance band (±{fee_pct:.1f}%) to automatically route gateway processing fees directly to `GL-6150` without manual controller bottleneck."
-            )
-        elif intent == "RESOLUTION_ACTION":
-            return (
-                f"### 🛠️ Strategic Remediation Playbook & Controller Action Plan for `{tx_id}`\n\n"
-                f"> **Resolution Objective**: Reconcile transaction `{tx_id}` ({vendor}), re-establish balance sheet equilibrium, and eliminate variance friction through double-entry accounting adjustments.\n\n"
-                f"#### 🎯 Step-by-Step Controller Execution Plan\n"
-                f"1. **Confirm Processing Fee Schedule**: Verify that the **₹{delta:,.2f}** variance corresponds to the contractual 2.0%–2.5% interchange schedule applied to {vendor}.\n"
-                f"2. **Post Adjusting Journal Entry**: Reclassify the ₹{delta:,.2f} variance out of open receivables by booking a debit directly to `GL-6150 (Bank & Gateway Fees)`.\n"
-                f"3. **Clear Outstanding Receivable**: Reconcile and clear the gross invoice balance in `GL-1200 (Accounts Receivable)`, matching it against net bank cash (`GL-1010`) plus the fee expense.\n\n"
-                f"#### ⚡ Proactive Operational & Policy Recommendations\n"
-                f"- **Automated Ledger Tolerance**: Implement an automated variance rule in the reconciliation engine so recurring gateway fees under 3% are resolved autonomously.\n"
-                f"- **Gateway Statement Cross-Validation**: Request monthly settlement batch summaries from the merchant processor to perform an automated secondary audit of all deductions.\n"
-                f"- **Vendor Payment Optimization**: Encourage counterparties like {vendor} to adopt direct net-banking or ACH rails where interchange fees are capped, reducing overall transaction friction."
-            )
-        elif intent == "JOURNAL_ENTRY":
-            return (
-                f"### 📝 Balanced General Ledger Adjusting Entry: `{tx_id}`\n\n"
-                f"> **Accounting Rationale**: Clear the gross accounts receivable invoice balance of **₹{inv_amt:,.2f}** for **{vendor}**, recognize net settled cash of **₹{bank_amt:,.2f}**, and book the deducted processing fee variance of **₹{delta:,.2f}** to operating expenses.\n\n"
-                f"#### 📊 Double-Entry Journal Specification\n"
-                f"| GL Account Code | Account Title | Financial Category | Debit (₹) | Credit (₹) | Audit & Posting Notes |\n"
-                f"|---|---|---|---|---|---|\n"
-                f"| `GL-1010` | Operating Cash Account | Current Asset | ₹{bank_amt:,.2f} | - | Cleared bank statement deposit intake |\n"
-                f"| `GL-6150` | Bank & Gateway Processing Fees | Operating Expense | ₹{delta:,.2f} | - | Interchange & gateway fee absorption |\n"
-                f"| `GL-1200` | Accounts Receivable | Current Asset | - | ₹{inv_amt:,.2f} | Customer invoice closed and cleared in full |\n\n"
-                f"> ⚖️ **Mathematical Equilibrium Verification**:\n"
-                f"> **Total Debits**: `₹{inv_amt:,.2f}` | **Total Credits**: `₹{inv_amt:,.2f}` *(Zero Variance — Perfectly Balanced)*\n\n"
-                f"#### 🏛️ Compliance & ERP Posting Instructions\n"
-                f"- **ERP Module**: General Ledger / Cash Management Journal Voucher (JV).\n"
-                f"- **Tax Treatment**: Processing fees booked to `GL-6150` are fully deductible operating expenses; ensure input GST/VAT credit is captured if gateway invoice is available.\n"
-                f"- **Audit Trail**: Reference transaction `{tx_id}` and vendor `{vendor}` on journal header for seamless statutory and external auditor sign-off.\n\n"
-                f"*(Note: All suggested accounting entries are proposed adjustments requiring human controller review and approval prior to ERP posting.)*"
-            )
-        elif intent == "RISK_AUDIT":
-            return (
-                f"### 🛡️ Compliance & Forensic Risk Evaluation: `{tx_id}`\n\n"
-                f"> **Risk Posture**: Transaction `{tx_id}` ({vendor}) carries an accounting variance of **₹{delta:,.2f}** ({status}). Audit risk is rated as low-to-moderate operational friction rather than fraud.\n\n"
-                f"#### 🔍 Key Risk Indicators\n"
-                f"- **Materiality Assessment**: The variance represents {fee_pct:.1f}% of transaction value, aligning with standard interchange schedules.\n"
-                f"- **Audit Trail Integrity**: Both bank receipt and ERP record share verifiable timestamps, preventing ghost or phantom record risks.\n"
-                f"- **Recommended Sign-Off**: Once the adjusting journal entry (`GL-6150`) is approved by the human controller, the exception can be safely closed."
-            )
-        elif intent == "AMOUNT_FEE":
-            return (
-                f"### 💰 Fee Drag & Variance Analysis: `{tx_id}`\n\n"
-                f"> **Summary**: For transaction `{tx_id}` with **{vendor}**, the gross expected amount was **₹{inv_amt:,.2f}**, but cleared bank cash was **₹{bank_amt:,.2f}**, leaving a fee variance of **₹{delta:,.2f}** ({fee_pct:.1f}%).\n\n"
-                f"#### 📊 Amount Breakdown\n"
-                f"- **Expected Invoiced Principal**: ₹{inv_amt:,.2f}\n"
-                f"- **Net Liquid Cleared Cash**: ₹{bank_amt:,.2f}\n"
-                f"- **Gateway Fee Deduction**: ₹{delta:,.2f} ({fee_pct:.1f}% interchange)\n"
-                f"- **Accounting Treatment**: Debit `GL-6150 (Gateway Fees)` to absorb the variance and reconcile the ledger."
-            )
-        elif intent == "DATE_TIMING":
-            days = abs(target.get("date_delta_days") or 2)
-            return (
-                f"### ⏳ Timing Drift & Settlement Transit Analysis: `{tx_id}`\n\n"
-                f"> **Settlement Overview**: Transaction `{tx_id}` with **{vendor}** exhibits a **+{days}-day transit offset** between invoice creation and banking clearance.\n\n"
-                f"#### 📊 Settlement Parameters\n"
-                f"- **Transit Delay**: {days} business days\n"
-                f"- **Cleared Principal**: ₹{bank_amt:,.2f}\n"
-                f"- **Variance Type**: Operational timing difference (no principal leakage)\n"
-                f"- **Recommended Treatment**: Apply automated 3-day clearing window rule in the reconciliation engine."
-            )
-
-    # 7. Fast-path deterministic routing for Vendor queries
-    if entity_info.get("matched_vendors") and bank_df is not None and "description" in bank_df.columns:
-        clean_bank_df = bank_df[~bank_df["transaction_id"].str.contains("_DUP", na=False)]
-        m_name = entity_info["matched_vendors"][0]
-        m_tx = clean_bank_df[clean_bank_df["description"] == m_name]
-        if len(m_tx) > 0:
-            m_ids = set(m_tx["transaction_id"])
-            m_res = [r for r in results if r.transaction_id in m_ids]
-            m_amt = float(m_tx["amount"].sum())
-            m_excs = [r for r in m_res if r.status != STATUS_MATCH]
-            m_clean = len(m_res) - len(m_excs)
-            m_rate = (m_clean / len(m_res) * 100) if len(m_res) > 0 else 0.0
-            return (
-                f"### 🏢 Counterparty Forensic Dossier: **{m_name}**\n\n"
-                f"> **Executive Summary**: Counterparty **{m_name}** accounts for **{len(m_tx)} total transactions** totaling **₹{m_amt:,.2f}** in gross banking intake. The merchant demonstrates a **{m_rate:.1f}% clean match rate** with **{len(m_excs)} active exceptions** requiring controller resolution.\n\n"
-                f"#### 📊 Merchant Audit & Transaction Breakdown\n"
-                f"| Metric / Dimension | Value | Financial Context |\n"
-                f"|---|---|---|\n"
-                f"| **Total Bank Intake** | **₹{m_amt:,.2f}** | Cumulative liquid receipts processed |\n"
-                f"| **Total Transaction Volume** | **{len(m_tx)} records** | Total clearing records in batch |\n"
-                f"| **Clean Match Rate** | **{m_rate:.1f}%** ({m_clean}/{len(m_res)} verified) | High operational concordance |\n"
-                f"| **Active Discrepancies** | **{len(m_excs)} exceptions** | Variances requiring fee/timing adjustments |\n\n"
-                f"#### 🔍 Active Exceptions Portfolio for {m_name}\n"
-                f"| Transaction ID | Category | Discrepancy Reason | Target GL Account |\n"
-                f"|---|---|---|---|\n"
-                + "\n".join([f"| `{r.transaction_id}` | **{r.status}** | {r.reason} | `GL-6150 / GL-1200` |" for r in m_excs[:8]])
-                + (f"\n| *... and {len(m_excs) - 8} additional items*" if len(m_excs) > 8 else "")
-                + f"\n\n#### 💡 Strategic CFO Advisory & Vendor Optimization\n"
-                f"- **Fee Structure**: Gateway deductions on {m_name} settlements average standard 2.0–2.5% interchange rates.\n"
-                f"- **Recommended Controller Action**: Apply batch fee journalization to `GL-6150 (Bank & Gateway Fees)` to close open receivables cleanly."
-            )
-
-    # 8. Fast-path deterministic routing for Cash Runway & Forward Forecast
-    if any(k in q_lower for k in ["runway", "cash forecast", "30 day", "30-day", "liquidity forecast", "forward cash"]):
-        clean_bank_df = bank_df[~bank_df["transaction_id"].str.contains("_DUP", na=False)] if (bank_df is not None and "transaction_id" in bank_df.columns) else pd.DataFrame()
-        total_bank_cash = float(clean_bank_df["amount"].sum()) if len(clean_bank_df) > 0 else 5000000.0
-        avg_daily_inflow = (total_bank_cash / 30) if total_bank_cash > 0 else 55000.0
-        avg_daily_burn = avg_daily_inflow * 0.65
-        net_daily = avg_daily_inflow - avg_daily_burn
-        proj_30_base = total_bank_cash + (net_daily * 30)
-        proj_30_opt = total_bank_cash + (net_daily * 30 * 1.15)
-        proj_30_cons = total_bank_cash + (net_daily * 30 * 0.82)
-        missing_count = sum(1 for r in results if r.status == STATUS_MISSING_INVOICE)
-
-        return (
-            f"### 📈 Treasury Intelligence: 30-Day Forward Cash Runway & Liquidity Analysis\n\n"
-            f"> **Executive Liquidity Brief**: Current operating treasury stands at **₹{total_bank_cash:,.2f}** in verified bank deposits. Forward liquidity projections indicate strong working capital stability over the 30-day horizon with positive daily cash velocity.\n\n"
-            f"#### 📊 30-Day Forward Liquidity Trajectory Snapshot\n"
-            f"| Projection Milestone | Base Scenario (₹) | Optimistic Case (+15%) | Conservative Case (-18%) | Confidence Score |\n"
-            f"|---|---|---|---|---|\n"
-            f"| **Day 1 (Current)** | **₹{total_bank_cash:,.2f}** | ₹{total_bank_cash:,.2f} | ₹{total_bank_cash:,.2f} | 98% |\n"
-            f"| **Day 7 (Week 1)** | **₹{total_bank_cash + (net_daily * 7):,.2f}** | ₹{total_bank_cash + (net_daily * 7 * 1.15):,.2f} | ₹{total_bank_cash + (net_daily * 7 * 0.82):,.2f} | 93% |\n"
-            f"| **Day 14 (Mid-Month)** | **₹{total_bank_cash + (net_daily * 14):,.2f}** | ₹{total_bank_cash + (net_daily * 14 * 1.15):,.2f} | ₹{total_bank_cash + (net_daily * 14 * 0.82):,.2f} | 87% |\n"
-            f"| **Day 21 (Week 3)** | **₹{total_bank_cash + (net_daily * 21):,.2f}** | ₹{total_bank_cash + (net_daily * 21 * 1.15):,.2f} | ₹{total_bank_cash + (net_daily * 21 * 0.82):,.2f} | 82% |\n"
-            f"| **Day 30 (Month-End)** | **₹{proj_30_base:,.2f}** | **₹{proj_30_opt:,.2f}** | **₹{proj_30_cons:,.2f}** | 76% |\n\n"
-            f"#### 🔬 Key Treasury Metrics & Inflow Dynamics\n"
-            f"- **Current Cleared Cash**: **₹{total_bank_cash:,.2f}**\n"
-            f"- **Projected Daily Net Cash Velocity**: **+₹{net_daily:,.2f}/day**\n"
-            f"- **Estimated 30-Day Runway Closing Balance**: **₹{proj_30_base:,.2f}**\n\n"
-            f"#### 💡 CFO Working Capital Optimization Recommendations\n"
-            f"1. **Accelerate Gateway Clearing**: Negotiate next-day (T+1) settlement cycles with primary payment processors to eliminate weekend transit drag.\n"
-            f"2. **Harvest Unbilled Deposits**: Resolve {missing_count} missing invoices in suspense (`GL-2250`) to convert unapplied deposits into recognized revenue.\n"
-            f"3. **Dynamic Discounting**: Deploy excess cash buffer into supplier early-payment discounts for risk-free annualized return."
-        )
-
-    # 9. Fast-path deterministic routing for GL adjusting entries
-    if any(k in q_lower for k in ["journal entries", "gl entries", "post for exceptions", "adjusting entries", "accounting entries", "double-entry entries"]):
-        amt_count = sum(1 for r in results if r.status == STATUS_AMOUNT_MISMATCH)
-        date_count = sum(1 for r in results if r.status == STATUS_DATE_MISMATCH)
-        missing_count = sum(1 for r in results if r.status == STATUS_MISSING_INVOICE)
-        dup_count = sum(1 for r in results if r.status == STATUS_DUPLICATE)
-        clean_count = sum(1 for r in results if r.status == STATUS_MATCH)
-        return (
-            f"### 📝 General Ledger (GL) Double-Entry Accounting Adjustments Summary\n\n"
-            f"> **Accounting Framework**: Standard double-entry adjustment vouchers (JVs) prepared for all {len(results) - clean_count - dup_count} active exception records to ensure balance sheet equilibrium and audit compliance.\n\n"
-            f"#### 📊 Master Adjusting Journal Entry Blueprint\n"
-            f"| Exception Class | Debit Account | Credit Account | Typical Amount | Accounting Purpose |\n"
-            f"|---|---|---|---|---|\n"
-            f"| **Amount Mismatches ({amt_count} items)** | `GL-1010` (Bank Cash)<br>`GL-6150` (Gateway Fees) | `GL-1200` (Accounts Receivable) | Net bank deposit + fee variance | Absorb processor fee deduction and clear full invoice receivable |\n"
-            f"| **Date Drift ({date_count} items)** | `GL-1010` (Bank Cash) | `GL-1200` (A/R Timing Reclass) | Full invoice amount | Recognize bank cash and clear receivable with timing reclassification |\n"
-            f"| **Missing Invoices ({missing_count} items)** | `GL-1010` (Bank Cash) | `GL-2250` (Suspense / Unapplied Cash) | Full bank deposit | Park unbilled cash intake in suspense pending sales invoice creation |\n"
-            f"| **Duplicate Records ({dup_count} items)** | `GL-1190` (Duplicate Clearing) | `GL-1010` (Bank Cash Reversal) | Duplicate intake amount | Isolate duplicate bank posting to eliminate phantom cash inflation |\n\n"
-            f"> ⚖️ **Mathematical Equilibrium Verification**: Total Debits equal Total Credits across all generated journal entries with zero unallocated variance.\n\n"
-            f"#### 🏛️ ERP Export & Integration\n"
-            f"- Use the **Export GL Entries** feature to download standard CSV/Excel adjustment vouchers formatted for direct import into SAP, Oracle NetSuite, and QuickBooks."
-        )
-
-    # 10. Fast-path deterministic routing for CFO Next Steps & Strategic Advice
-    if any(k in q_lower for k in ["cfo do next", "recommendations to improve", "remediation plan", "next steps for reconciliation", "action plan"]):
-        amt_excs = [r for r in results if r.status == STATUS_AMOUNT_MISMATCH]
-        missing_excs = [r for r in results if r.status == STATUS_MISSING_INVOICE]
-        total_var = sum(abs(r.amount_delta or 0) for r in amt_excs)
-        return (
-            f"### 💼 Strategic CFO Action Blueprint & Remediation Plan\n\n"
-            f"> **Executive Mandate**: A 4-pillar action plan designed to streamline reconciliation throughput, eliminate fee leakage, and ensure audit compliance.\n\n"
-            f"#### 🎯 4-Pillar Controller Execution Plan\n"
-            f"1. **Priority 1: Clear Unbilled Cash Deposits (GL-2250)**\n"
-            f"   - Dispatch automated billing requests to sales and procurement for the {len(missing_excs)} unbilled deposits (`TX0031`–`TX0040`) to convert suspense balances into recognized revenue.\n\n"
-            f"2. **Priority 2: Post Batch Gateway Fee Adjustments (GL-6150)**\n"
-            f"   - Book the **₹{total_var:,.2f}** cumulative variance directly to `GL-6150 (Bank & Gateway Fees)` to close open receivables in `GL-1200` cleanly.\n\n"
-            f"3. **Priority 3: Automate 3-Day Settlement Drift Tolerances**\n"
-            f"   - Configure a 3-day date tolerance rule in the reconciler so standard multi-day clearing drifts are approved autonomously.\n\n"
-            f"4. **Priority 4: Negotiate Gateway Interchange Concessions**\n"
-            f"   - Leverage high transaction volume with primary payment gateways to negotiate 30–50 basis point reductions on merchant discount rates (MDR)."
-        )
-
-
-    # Construct lean, high-relevance context for ultra-fast generation
-    context = {
-        "portfolio_summary": status_counts,
-        "total_records": len(results),
+    context_slice = {
+        "transaction_id": actual_tx_id,
+        "status": target_res.status,
+        "engine_reason": target_res.reason,
+        "amount_delta": target_res.amount_delta,
+        "date_delta_days": target_res.date_delta_days,
+        "merchant_match_score": target_res.merchant_match_score,
+        "payment_status": p_status,
+        "bank_record": {
+            "amount": b_amt,
+            "date": b_date,
+            "description": b_desc,
+            "reference": b_ref,
+        },
+        "matched_invoice": {
+            "invoice_id": i_id,
+            "amount": i_amt,
+            "date": i_date,
+            "customer": i_cust,
+        } if target_res.invoice_id else None,
+        "matched_payment": {
+            "payment_id": getattr(target_res, "payment_id", p_row.get("payment_id", "N/A")),
+            "status": p_status,
+        } if getattr(target_res, "payment_id", None) or p_row else None,
     }
 
-    if entity_info.get("matched_records"):
-        context["targeted_transaction"] = entity_info["matched_records"][0]
-    elif entity_info.get("matched_vendors"):
-        v_list = entity_info["matched_vendors"]
-        context["targeted_vendors"] = v_list
-        if bank_df is not None and "description" in bank_df.columns:
-            clean_b = bank_df[~bank_df["transaction_id"].str.contains("_DUP", na=False)]
-            v_recs = clean_b[clean_b["description"].isin(v_list)]
-            context["vendor_stats"] = {
-                "total_volume": float(v_recs["amount"].sum()),
-                "tx_count": len(v_recs),
-            }
-    else:
-        # High-level sample of exceptions for broad inquiries
-        sample_excs = []
-        for r in results:
-            if r.status not in (STATUS_MATCH, STATUS_DUPLICATE):
-                sample_excs.append({
-                    "tx": r.transaction_id,
-                    "status": r.status,
-                    "delta": r.amount_delta,
-                    "days": r.date_delta_days,
-                    "reason": r.reason,
-                })
-                if len(sample_excs) >= 6:
-                    break
-        context["key_exceptions_sample"] = sample_excs
+    prompt = f"""You are a Lead Financial Controller and Forensic Auditor reviewing a reconciliation exception.
 
-    if metrics:
-        context["benchmark_accuracy"] = f"{metrics.get('accuracy', 100.0):.1f}%"
+Explain, in plain conversational language, why this specific transaction was classified as {target_res.status} and what the controller should do about it.
 
-    prompt = f"""You are an elite, highly creative AI Financial Controller and Strategic CFO Copilot. Your mission is to provide deep, comprehensive, intellectually stimulating, and creative financial analysis that illuminates the flow of capital and empowers executive decision-making.
+TRANSACTION DATA:
+{json.dumps(context_slice, indent=2)}
 
-When answering, adopt an engaging, articulate, and creative CFO persona. Weave numbers into compelling financial narratives rather than brief one-liners.
-
-DATASET CONTEXT:
-{json.dumps(context, indent=2)}
-
-USER INQUIRY:
-{question}
-
-RESPONSE ARCHITECTURE & CREATIVE GUIDELINES:
-Craft a comprehensive, beautifully structured response with rich narrative depth and analytical creativity:
-
-1. 📖 The Financial Narrative & Context:
-   - Tell the real-world business story behind the figures. Explain how funds moved across banking feeds, clearing gateways, and invoicing ledgers.
-   - Use vivid business metaphors (e.g., payment gateway tollbooths, settlement transit rivers, unbilled cash islands).
-
-2. 🔬 Deep-Dive Forensic & Quantitative Breakdown:
-   - Present figures using clean, elegant Markdown Tables whenever helpful.
-   - Break down variances, fee drag percentages, timing offsets, and counterparty exposure.
-   - Detail the underlying mechanics of why discrepancies occurred and their materiality.
-
-3. 💡 Strategic CFO Advisory & Scenario Modeling:
-   - Provide creative, forward-looking strategic recommendations.
-   - Model the downstream effects (e.g., annualized margin drag, working capital velocity, cash conversion cycle improvements).
-   - Suggest proactive vendor or processor negotiation strategies (e.g., interchange volume rebates, dynamic discount terms).
-
-4. ⚖️ Double-Entry Journal & ERP Action Blueprint:
-   - Outline precise, balanced journal entries with clear debits and credits (e.g., GL-1010 Operating Cash, GL-6150 Gateway Fees, GL-1200 Accounts Receivable).
-   - Ensure Total Debits exactly equal Total Credits (Mathematical Equilibrium).
-
-FORMATTING & STYLE:
-- Style: Deliver crisp, high-impact, beautifully formatted CFO analysis (under 300 words).
-- Presentation: Use clean markdown headings, compact tables, and bold key metrics.
-- Currency: Format all monetary amounts cleanly with ₹ (e.g. ₹15,128.00).
-- Answer the user's specific question directly with financial depth and precision!"""
+INSTRUCTIONS:
+- Directly explain why transaction {actual_tx_id} was classified as {target_res.status}, referencing its specific amount (₹{b_amt:,.2f}) and counterparty ({b_desc}).
+- Give the controller a precise, practical next action (e.g. adjust fee to GL-6150, accept settlement transit offset, or request missing invoice from AP).
+- Reference ONLY this transaction. Do not mention other transactions.
+- Keep the response concise, clear, and professional (100–160 words).
+"""
 
     try:
-        response_text = generate_gemini_content(
+        return generate_gemini_content(
             contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=550,
-            ),
-        )
-        return FinancialGuardrailEngine.sanitize_and_verify_output(
-            response_text, question, entity_info.get("matched_records", []), len(results), history=history
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=400),
         )
     except Exception as e:
         if verbose:
-            print(f"  [AI Copilot Direct Fallback Query Engine]: {e}")
-
-        q_upper = question.upper()
-        q_lower = question.lower().strip()
-
-        # -------------------------------------------------------------
-        # Helper data lookups
-        # -------------------------------------------------------------
-        clean_bank_df = bank_df[~bank_df["transaction_id"].str.contains("_DUP", na=False)] if (bank_df is not None and "transaction_id" in bank_df.columns) else pd.DataFrame()
-        total_bank_cash = float(clean_bank_df["amount"].sum()) if len(clean_bank_df) > 0 else 0.0
-
-        inv_map = {}
-        if invoices_df is not None and "invoice_id" in invoices_df.columns:
-            for _, i_row in invoices_df.iterrows():
-                inv_map[str(i_row["invoice_id"]).strip().upper()] = i_row
-
-        amt_excs = [r for r in results if r.status == STATUS_AMOUNT_MISMATCH]
-        date_excs = [r for r in results if r.status == STATUS_DATE_MISMATCH]
-        missing_excs = [r for r in results if r.status == STATUS_MISSING_INVOICE]
-        dup_excs = [r for r in results if r.status == STATUS_DUPLICATE]
-        clean_matches = [r for r in results if r.status == STATUS_MATCH]
-        total_variance = sum(abs(r.amount_delta or 0) for r in amt_excs)
-
-        # -------------------------------------------------------------
-        # A. Specific Transaction Mentioned or Focused
-        # -------------------------------------------------------------
-        found_tx = [r for r in results if r.transaction_id.upper() in q_upper]
-        if not found_tx and entity_info.get("matched_records"):
-            target_id = entity_info["matched_records"][0]["transaction_id"]
-            found_tx = [r for r in results if r.transaction_id.upper() == target_id.upper()]
-
-        if found_tx:
-            target_r = found_tx[0]
-            tx_id = target_r.transaction_id
-            b_row = bank_dict.get(tx_id.upper(), {})
-            b_amt = float(b_row.get("amount", 0.0)) if isinstance(b_row, dict) or hasattr(b_row, "get") else float(getattr(b_row, "amount", 0.0))
-            vendor = str(b_row.get("description", "Counterparty")) if isinstance(b_row, dict) or hasattr(b_row, "get") else str(getattr(b_row, "description", "Counterparty"))
-            delta = abs(target_r.amount_delta or 0)
-            status = target_r.status
-            reason = target_r.reason
-            pay_status = target_r.payment_status or "settled"
-            fee_pct = (delta / (b_amt + delta) * 100) if (b_amt + delta) > 0 else 2.5
-            inv_amt = b_amt + delta if status == STATUS_AMOUNT_MISMATCH else (b_amt if status == STATUS_MATCH or status == STATUS_DATE_MISMATCH else 0.0)
-
-            # Check intent
-            intent = FinancialGuardrailEngine.classify_intent(question, has_focused_tx=True)
-
-            if intent == "JOURNAL_ENTRY" or any(k in q_lower for k in ["journal", "gl", "debit", "credit", "double-entry", "accounting entry"]):
-                gl_code = "GL-6150 (Bank & Gateway Fees)" if status == STATUS_AMOUNT_MISMATCH else ("GL-2250 (Suspense / Unapplied Receipts)" if status == STATUS_MISSING_INVOICE else ("GL-1190 (Duplicate Batch Clearing)" if status == STATUS_DUPLICATE else "GL-1200 (Accounts Receivable)"))
-                return (
-                    f"### 📝 Balanced General Ledger Adjusting Entry: `{tx_id}`\n\n"
-                    f"> **Accounting Rationale**: Reconcile transaction `{tx_id}` for counterparty **{vendor}**, recognize net settled bank cash of **₹{b_amt:,.2f}**, and balance the transaction according to standard GAAP double-entry principles.\n\n"
-                    f"#### 📊 Double-Entry Journal Specification\n"
-                    f"| GL Account Code | Account Title | Financial Category | Debit (₹) | Credit (₹) | Audit & Posting Notes |\n"
-                    f"|---|---|---|---|---|---|\n"
-                    f"| `GL-1010` | Operating Bank Account | Current Asset | ₹{b_amt:,.2f} | - | Cleared bank statement deposit intake |\n"
-                    + (f"| `GL-6150` | Bank & Gateway Processing Fees | Operating Expense | ₹{delta:,.2f} | - | Interchange fee deduction absorption |\n" if status == STATUS_AMOUNT_MISMATCH else "")
-                    + (f"| `GL-2250` | Unapplied Customer Receipts | Current Liability | - | ₹{b_amt:,.2f} | Parked in suspense pending invoice upload |\n" if status == STATUS_MISSING_INVOICE else "")
-                    + (f"| `GL-1190` | Duplicate Batch Clearing | Suspense Clearing | ₹{b_amt:,.2f} | - | Isolated duplicate record to prevent cash double-counting |\n" if status == STATUS_DUPLICATE else "")
-                    + (f"| `GL-1010` | Operating Bank Account | Current Asset | - | ₹{b_amt:,.2f} | Reverse duplicate bank posting |\n" if status == STATUS_DUPLICATE else "")
-                    + (f"| `GL-1200` | Accounts Receivable | Current Asset | - | ₹{inv_amt:,.2f} | Customer invoice closed and cleared in full |\n" if status in (STATUS_AMOUNT_MISMATCH, STATUS_DATE_MISMATCH, STATUS_MATCH) and not status == STATUS_DUPLICATE else "")
-                    + f"\n> ⚖️ **Mathematical Equilibrium Verification**:\n"
-                    f"> **Total Debits**: `₹{max(b_amt + delta, b_amt):,.2f}` | **Total Credits**: `₹{max(b_amt + delta, b_amt):,.2f}` *(Zero Variance — Perfectly Balanced)*\n\n"
-                    f"#### 🏛️ Compliance & ERP Posting Instructions\n"
-                    f"- **ERP Target Module**: General Ledger Journal Voucher (JV).\n"
-                    f"- **Audit Verification**: Reference transaction `{tx_id}` on journal line memo for statutory auditor sign-off."
-                )
-
-            elif intent == "RESOLUTION_ACTION" or any(k in q_lower for k in ["fix", "resolve", "action", "how do i", "how should i", "remediation"]):
-                return (
-                    f"### 🛠️ Strategic Remediation Playbook & Controller Action Plan for `{tx_id}`\n\n"
-                    f"> **Resolution Objective**: Reconcile transaction `{tx_id}` ({vendor}), re-establish balance sheet equilibrium, and eliminate variance friction through double-entry accounting adjustments.\n\n"
-                    f"#### 🎯 Step-by-Step Controller Execution Plan\n"
-                    f"1. **Confirm Processing Fee Schedule**: Verify that the variance corresponds to contractual interchange schedules applied to {vendor}.\n"
-                    f"2. **Post Adjusting Journal Entry**: Reclassify variance out of open receivables by booking a debit to `GL-6150 (Bank & Gateway Fees)` or parking unbilled deposits in `GL-2250`.\n"
-                    f"3. **Clear Outstanding Receivable**: Reconcile and clear the gross invoice balance in `GL-1200 (Accounts Receivable)`.\n\n"
-                    f"#### ⚡ Proactive Operational & Policy Recommendations\n"
-                    f"- **Automated Ledger Tolerance**: Implement an automated variance rule in the reconciliation engine so recurring gateway fees under 3% are resolved autonomously.\n"
-                    f"- **Vendor Payment Optimization**: Encourage counterparties like {vendor} to adopt direct net-banking or ACH rails to reduce transaction friction."
-                )
-
-            # Default rich transaction deep-dive
+            print(f"  [AI Fallback for {actual_tx_id}]: {e}")
+        # Deterministic scoped fallback
+        if target_res.status == STATUS_AMOUNT_MISMATCH:
+            delta = abs(target_res.amount_delta or 0.0)
+            inv_total = (b_amt + delta) if (b_amt + delta) > 0 else (i_amt or b_amt)
+            fee_pct = (delta / inv_total * 100) if inv_total > 0 else 2.5
             return (
-                f"### 🔍 Deep-Dive Forensic Root Cause Investigation: `{tx_id}`\n\n"
-                f"> **Executive Summary**: Transaction `{tx_id}` involving counterparty **{vendor}** cleared at **₹{b_amt:,.2f}** against expected invoice records, classified as **{status}** with payment status `{pay_status}`.\n\n"
-                f"#### 📖 The Money Flow Story\n"
-                f"When **{vendor}** finalized this payment, funds cleared through the banking rail. Forensic inspection indicates: *{reason}*. "
-                + (f"A processing fee of ₹{delta:,.2f} ({fee_pct:.1f}%) was deducted at capture, leaving net bank funds of ₹{b_amt:,.2f} against the gross billing invoice." if status == STATUS_AMOUNT_MISMATCH else "")
-                + (f"A timing offset was detected between the invoice issuance and the bank clearing date due to standard gateway clearing lag." if status == STATUS_DATE_MISMATCH else "")
-                + (f"Cash was received into treasury without an active accounts receivable invoice in the billing ledger." if status == STATUS_MISSING_INVOICE else "")
-                + (f"A duplicate posting was captured and isolated to safeguard the general ledger against cash inflation." if status == STATUS_DUPLICATE else "")
-                + f"\n\n#### 📊 Multi-Factor Forensic Breakdown\n"
-                f"| Audit Dimension | Value / Parameter | Operational Significance |\n"
-                f"|---|---|---|\n"
-                f"| **Transaction Reference** | `{tx_id}` | Primary reconciliation trace key |\n"
-                f"| **Counterparty / Vendor** | **{vendor}** | Counterparty entity on bank feed |\n"
-                f"| **Cleared Bank Intake** | **₹{b_amt:,.2f}** | Net liquid cash received into operating account |\n"
-                f"| **Discrepancy Category** | **{status}** | Primary accounting variance classification |\n"
-                f"| **Variance / Delta** | **₹{delta:,.2f}** | Variance between bank intake and billing ledger |\n"
-                f"| **Payment Gateway State** | `{pay_status}` | Real-time processor transaction status |\n"
-                f"| **Forensic Diagnosis** | {reason} | Verified root-cause forensic finding |\n\n"
-                f"#### 💡 Strategic CFO Advisory & Working Capital Impact\n"
-                f"- **Downstream Ledger Impact**: Balance sheet integrity requires booking adjustments to ensure `GL-1010 (Operating Cash)` matches physical statements.\n"
-                f"- **Recommended Controller Next Steps**: Post the corresponding adjusting journal voucher or approve runtime tolerances in the **Exception Ledger**."
+                f"Transaction **`{actual_tx_id}`** with **{b_desc}** cleared at **₹{b_amt:,.2f}** in the bank statement against an expected gross invoice amount of **₹{inv_total:,.2f}**, leaving a variance of **₹{delta:,.2f}** ({fee_pct:.1f}%).\n\n"
+                f"**Root Cause**: Payment gateway interchange and merchant processing toll deduction retained prior to bank settlement.\n\n"
+                f"**Recommended Action**: Post an adjusting journal entry debiting `GL-6150 (Payment Gateway & Bank Fee Expense)` for ₹{delta:,.2f} and crediting `GL-1200 (Accounts Receivable)` to balance and close the open invoice ledger."
+            )
+        elif target_res.status == STATUS_DATE_MISMATCH:
+            drift = abs(target_res.date_delta_days or 2)
+            return (
+                f"Transaction **`{actual_tx_id}`** with **{b_desc}** (₹{b_amt:,.2f}) exhibits a **{drift}-day calendar timing offset** between invoice creation and bank value clearance ({b_date}).\n\n"
+                f"**Root Cause**: Standard multi-day banking clearing transit interval (T+2 clearing window / weekend settlement hold). ₹0 cash is missing.\n\n"
+                f"**Recommended Action**: Accept the timing drift under policy clearance tolerance and clear Accounts Receivable with timing reclassification to `GL-1200`."
+            )
+        elif target_res.status == STATUS_MISSING_INVOICE:
+            return (
+                f"Transaction **`{actual_tx_id}`** shows a cleared bank intake of **₹{b_amt:,.2f}** from **{b_desc}**, but no corresponding accounts receivable invoice exists in the ERP billing ledger (Gateway status: `{p_status}`).\n\n"
+                f"**Root Cause**: Cash intake received without a preceding billing record or unapplied customer deposit.\n\n"
+                f"**Recommended Action**: Dispatch an automated billing inquiry to Accounts Payable / Sales to issue the sales invoice, and temporarily park funds in `GL-2250 (Unapplied Customer Receipts / Suspense)`."
+            )
+        elif target_res.status == STATUS_DUPLICATE:
+            return (
+                f"Transaction **`{actual_tx_id}`** (₹{b_amt:,.2f} for **{b_desc}**) is an identical duplicate statement line ({target_res.reason}).\n\n"
+                f"**Root Cause**: Redundant bank statement export or re-transmitted settlement batch.\n\n"
+                f"**Recommended Action**: Keep the duplicate entry isolated in `GL-1190 (Duplicate Batch Clearing)` to prevent phantom cash inflation and avoid double-counting."
+            )
+        elif target_res.status == STATUS_MATCH:
+            return (
+                f"Transaction **`{actual_tx_id}`** for **₹{b_amt:,.2f}** with **{b_desc}** matched cleanly with Invoice `{i_id}`. All parameters (amount, settlement date, counterparty) reconciled with zero discrepancy across banking feeds and ledgers."
+            )
+        else:
+            return (
+                f"Transaction **`{actual_tx_id}`** ({target_res.status}) for **₹{b_amt:,.2f}** with **{b_desc}**: {target_res.reason}. Recommended Action: Review transaction references and apply controller adjustment."
             )
 
-        # -------------------------------------------------------------
-        # B. Specific Vendor / Merchant Mentioned
-        # -------------------------------------------------------------
-        if bank_df is not None and "description" in bank_df.columns:
-            for m in clean_bank_df["description"].dropna().unique():
-                if isinstance(m, str) and len(m) >= 3 and m.lower() in q_lower:
-                    m_tx = clean_bank_df[clean_bank_df["description"] == m]
-                    m_ids = set(m_tx["transaction_id"])
-                    m_res = [r for r in results if r.transaction_id in m_ids]
-                    m_amt = float(m_tx["amount"].sum())
-                    m_excs = [r for r in m_res if r.status != STATUS_MATCH]
-                    m_clean = len(m_res) - len(m_excs)
-                    m_rate = (m_clean / len(m_res) * 100) if len(m_res) > 0 else 0.0
 
-                    return (
-                        f"### 🏢 Counterparty Forensic Dossier: **{m}**\n\n"
-                        f"> **Executive Summary**: Counterparty **{m}** accounts for **{len(m_tx)} total transactions** totaling **₹{m_amt:,.2f}** in gross banking intake. The merchant demonstrates a **{m_rate:.1f}% clean match rate** with **{len(m_excs)} active exceptions** requiring controller resolution.\n\n"
-                        f"#### 📊 Merchant Audit & Transaction Breakdown\n"
-                        f"| Metric / Dimension | Value | Financial Context |\n"
-                        f"|---|---|---|\n"
-                        f"| **Total Bank Intake** | **₹{m_amt:,.2f}** | Cumulative liquid receipts processed |\n"
-                        f"| **Total Transaction Volume** | **{len(m_tx)} records** | Total clearing records in batch |\n"
-                        f"| **Clean Match Rate** | **{m_rate:.1f}%** ({m_clean}/{len(m_res)} verified) | High operational concordance |\n"
-                        f"| **Active Discrepancies** | **{len(m_excs)} exceptions** | Variances requiring fee/timing adjustments |\n\n"
-                        f"#### 🔍 Active Exceptions Portfolio for {m}\n"
-                        f"| Transaction ID | Category | Discrepancy Reason | Target GL Account |\n"
-                        f"|---|---|---|---|\n"
-                        + "\n".join([f"| `{r.transaction_id}` | **{r.status}** | {r.reason} | `GL-6150 / GL-1200` |" for r in m_excs[:8]])
-                        + (f"\n| *... and {len(m_excs) - 8} additional items*" if len(m_excs) > 8 else "")
-                        + f"\n\n#### 💡 Strategic CFO Advisory & Vendor Optimization\n"
-                        f"- **Fee Structure**: Gateway deductions on {m} settlements average standard 2.0–2.5% interchange rates.\n"
-                        f"- **Recommended Controller Action**: Apply batch fee journalization to `GL-6150 (Bank & Gateway Fees)` to close open receivables cleanly."
-                    )
+def explain_summary(
+    results: List[ReconciliationResult],
+    verbose: bool = True,
+) -> str:
+    """
+    Generates a high-level plain-language summary of the entire reconciliation batch.
+    Sends ONLY aggregate counts and totals — never per-row detail.
+    """
+    status_counts = {}
+    total_variance = 0.0
+    pending_count = 0
 
-        # -------------------------------------------------------------
-        # C. Cash Flow / Forward Forecast / Liquidity Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["cash", "forecast", "runway", "liquidity", "burn", "inflow", "outflow", "working capital", "30-day", "treasury"]):
-            pending_total = sum(float(r.amount_delta or 0) for r in results if getattr(r, "payment_status", "") == "pending")
-            avg_daily_inflow = (total_bank_cash / 30) if total_bank_cash > 0 else 55000.0
-            avg_daily_burn = avg_daily_inflow * 0.65
-            net_daily = avg_daily_inflow - avg_daily_burn
-            proj_30_base = total_bank_cash + (net_daily * 30)
-            proj_30_opt = total_bank_cash + (net_daily * 30 * 1.15)
-            proj_30_cons = total_bank_cash + (net_daily * 30 * 0.82)
+    for r in results:
+        status_counts[r.status] = status_counts.get(r.status, 0) + 1
+        if r.status not in (STATUS_MATCH, STATUS_DUPLICATE) and r.amount_delta:
+            total_variance += abs(r.amount_delta)
+        if getattr(r, "payment_status", "") == "pending":
+            pending_count += 1
 
-            return (
-                f"### 📈 Treasury Intelligence: 30-Day Forward Cash Runway & Liquidity Analysis\n\n"
-                f"> **Executive Liquidity Brief**: Current operating treasury stands at **₹{total_bank_cash:,.2f}** in verified bank deposits. Forward liquidity projections indicate strong working capital stability over the 30-day horizon with positive daily cash velocity.\n\n"
-                f"#### 📊 30-Day Forward Liquidity Trajectory Snapshot\n"
-                f"| Projection Milestone | Base Scenario (₹) | Optimistic Case (+15%) | Conservative Case (-18%) | Confidence Score |\n"
-                f"|---|---|---|---|---|\n"
-                f"| **Day 1 (Current)** | **₹{total_bank_cash:,.2f}** | ₹{total_bank_cash:,.2f} | ₹{total_bank_cash:,.2f} | 98% |\n"
-                f"| **Day 7 (Week 1)** | **₹{total_bank_cash + (net_daily * 7):,.2f}** | ₹{total_bank_cash + (net_daily * 7 * 1.15):,.2f} | ₹{total_bank_cash + (net_daily * 7 * 0.82):,.2f} | 93% |\n"
-                f"| **Day 14 (Mid-Month)** | **₹{total_bank_cash + (net_daily * 14):,.2f}** | ₹{total_bank_cash + (net_daily * 14 * 1.15):,.2f} | ₹{total_bank_cash + (net_daily * 14 * 0.82):,.2f} | 87% |\n"
-                f"| **Day 21 (Week 3)** | **₹{total_bank_cash + (net_daily * 21):,.2f}** | ₹{total_bank_cash + (net_daily * 21 * 1.15):,.2f} | ₹{total_bank_cash + (net_daily * 21 * 0.82):,.2f} | 82% |\n"
-                f"| **Day 30 (Month-End)** | **₹{proj_30_base:,.2f}** | **₹{proj_30_opt:,.2f}** | **₹{proj_30_cons:,.2f}** | 76% |\n\n"
-                f"#### 🔬 Key Treasury Metrics & Inflow Dynamics\n"
-                f"- **Current Cleared Cash**: **₹{total_bank_cash:,.2f}**\n"
-                f"- **Projected Daily Net Cash Velocity**: **+₹{net_daily:,.2f}/day**\n"
-                f"- **Estimated 30-Day Runway Closing Balance**: **₹{proj_30_base:,.2f}**\n\n"
-                f"#### 💡 CFO Working Capital Optimization Recommendations\n"
-                f"1. **Accelerate Gateway Clearing**: Negotiate next-day (T+1) settlement cycles with primary payment processors to eliminate weekend transit drag.\n"
-                f"2. **Harvest Unbilled Deposits**: Resolve {len(missing_excs)} missing invoices in suspense (`GL-2250`) to convert unapplied deposits into recognized revenue.\n"
-                f"3. **Dynamic Discounting**: Deploy excess cash buffer into supplier early-payment discounts for risk-free annualized return."
-            )
+    total_records = len(results)
+    matched_count = status_counts.get(STATUS_MATCH, 0)
+    dup_count = status_counts.get(STATUS_DUPLICATE, 0)
+    clean_total = max(1, total_records - dup_count)
+    clean_match_rate = round((matched_count / clean_total * 100), 1)
+    exceptions_count = clean_total - matched_count
 
-        # -------------------------------------------------------------
-        # D. General Ledger / Double-Entry / Accounting Entries Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["journal", "gl", "entry", "entries", "debit", "credit", "book", "posting", "ledger", "erp", "netsuite", "quickbooks", "sap"]):
-            return (
-                f"### 📝 General Ledger (GL) Double-Entry Accounting Adjustments Summary\n\n"
-                f"> **Accounting Framework**: Standard double-entry adjustment vouchers (JVs) prepared for all {len(results) - len(clean_matches) - len(dup_excs)} active exception records to ensure balance sheet equilibrium and audit compliance.\n\n"
-                f"#### 📊 Master Adjusting Journal Entry Blueprint\n"
-                f"| Exception Class | Debit Account | Credit Account | Typical Amount | Accounting Purpose |\n"
-                f"|---|---|---|---|---|\n"
-                f"| **Amount Mismatches ({len(amt_excs)} items)** | `GL-1010` (Bank Cash)<br>`GL-6150` (Gateway Fees) | `GL-1200` (Accounts Receivable) | Net bank deposit + fee variance | Absorb processor fee deduction and clear full invoice receivable |\n"
-                f"| **Date Drift ({len(date_excs)} items)** | `GL-1010` (Bank Cash) | `GL-1200` (A/R Timing Reclass) | Full invoice amount | Recognize bank cash and clear receivable with timing reclassification |\n"
-                f"| **Missing Invoices ({len(missing_excs)} items)** | `GL-1010` (Bank Cash) | `GL-2250` (Suspense / Unapplied Cash) | Full bank deposit | Park unbilled cash intake in suspense pending sales invoice creation |\n"
-                f"| **Duplicate Records ({len(dup_excs)} items)** | `GL-1190` (Duplicate Clearing) | `GL-1010` (Bank Cash Reversal) | Duplicate intake amount | Isolate duplicate bank posting to eliminate phantom cash inflation |\n\n"
-                f"> ⚖️ **Mathematical Equilibrium Verification**: Total Debits equal Total Credits across all generated journal entries with zero unallocated variance.\n\n"
-                f"#### 🏛️ ERP Export & Integration\n"
-                f"- Use the **Export GL Entries** feature to download standard CSV/Excel adjustment vouchers formatted for direct import into SAP, Oracle NetSuite, and QuickBooks."
-            )
+    amt_count = status_counts.get(STATUS_AMOUNT_MISMATCH, 0)
+    date_count = status_counts.get(STATUS_DATE_MISMATCH, 0)
+    missing_count = status_counts.get(STATUS_MISSING_INVOICE, 0)
 
-        # -------------------------------------------------------------
-        # E. Discrepancy / Amount Variance / Gateway Fee Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["amount", "mismatch", "variance", "fee", "fees", "interchange", "deduction", "delta", "drag"]):
-            return (
-                f"### 🔍 Forensic Variance & Gateway Interchange Fee Analysis\n\n"
-                f"> **Executive Summary**: Identified **{len(amt_excs)} amount mismatches** representing a cumulative variance of **₹{total_variance:,.2f}** across bank statement receipts and billing ledger records.\n\n"
-                f"#### 📊 Variance Distribution & Impact Breakdown\n"
-                f"- **Total Discrepancy Volume**: **{len(amt_excs)} transactions** (`TX0001` through `TX0015`)\n"
-                f"- **Cumulative Fee Drag**: **₹{total_variance:,.2f}** (averaging ~2.0%–2.8% per transaction)\n"
-                f"- **Forensic Mechanism**: Payment gateway interchange deductions, merchant discount rates (MDR), and micro-transaction processing tolls deducted prior to bank settlement.\n\n"
-                f"| Transaction ID | Bank Cleared (₹) | Variance Delta (₹) | Fee Rate (%) | Target GL Account |\n"
-                f"|---|---|---|---|---|\n"
-                + "\n".join([f"| `{r.transaction_id}` | Verified | ₹{abs(r.amount_delta or 0):,.2f} | ~2.5% | `GL-6150 (Bank & Gateway Fees)` |" for r in amt_excs[:8]])
-                + (f"\n| *... and {len(amt_excs) - 8} more transactions*" if len(amt_excs) > 8 else "")
-                + f"\n\n#### 💡 Strategic CFO Fee Mitigation Playbook\n"
-                f"1. **Automated Tolerance Rules**: Configure an autonomous runtime tolerance in the reconciler so fee variances under 3.0% are booked directly to `GL-6150` without controller bottleneck.\n"
-                f"2. **Interchange Optimization**: For high-volume vendors, negotiate blended merchant discount rates (MDR) below 1.8% to recover up to 50 basis points of margin."
-            )
+    summary_context = {
+        "total_records": total_records,
+        "clean_matches": matched_count,
+        "clean_match_rate_pct": clean_match_rate,
+        "total_exceptions": exceptions_count,
+        "exceptions_breakdown": {
+            "amount_mismatches": amt_count,
+            "date_timing_mismatches": date_count,
+            "missing_invoices": missing_count,
+        },
+        "quarantined_duplicates": dup_count,
+        "total_amount_variance": round(total_variance, 2),
+        "pending_gateway_settlements": pending_count,
+    }
 
-        # -------------------------------------------------------------
-        # F. Date Mismatch / Clearing Drift Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["date", "timing", "drift", "delay", "lag", "settlement", "calendar", "posting"]):
-            return (
-                f"### 📅 Forensic Timing & Settlement Drift Analysis\n\n"
-                f"> **Executive Summary**: Identified **{len(date_excs)} date drift exceptions** (`TX0016`–`TX0030`) caused by standard inter-bank clearing cycles, gateway transit windows (T+2), and weekend settlement holds.\n\n"
-                f"#### 📊 Date Drift Characteristics & Risk Evaluation\n"
-                f"- **Impacted Volume**: **{len(date_excs)} transactions**\n"
-                f"- **Average Calendar Drift**: Exactly 2 business days between invoice issuance and bank credit\n"
-                f"- **Audit Risk Classification**: **LOW** (Zero monetary loss; strictly a timing reclassification)\n\n"
-                f"| Record Series | Calendar Drift | Operational Cause | Recommended Action |\n"
-                f"|---|---|---|---|\n"
-                f"| `TX0016`–`TX0030` | 2 Days Lag | T+2 Payment Gateway Settlement Cycle | Auto-accept within 3-day policy tolerance |\n\n"
-                f"#### 💡 Policy & Workflow Recommendations\n"
-                f"- **Runtime Tolerance Adjustment**: Set the Date Tolerance threshold to **2 or 3 days** in the top navigation bar to automatically reclassify these records as clean matches."
-            )
+    prompt = f"""You are a Lead Financial Controller. Give a plain-language overall summary of this reconciliation batch — how many matched cleanly, what the exceptions break down into, and the single most important thing to look at first.
 
-        # -------------------------------------------------------------
-        # G. Missing Invoices / Unbilled Cash Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["missing", "unbilled", "unapplied", "no invoice", "missing invoice", "suspense"]):
-            return (
-                f"### 📑 Forensic Audit: Unbilled Deposits & Missing Invoices ({len(missing_excs)})\n\n"
-                f"> **Revenue & Billing Alert**: Identified **{len(missing_excs)} unbilled cash deposits** (`TX0031`–`TX0040`) where funds cleared into operating bank accounts but lack a corresponding sales invoice in the ERP billing ledger.\n\n"
-                f"#### 💰 Financial Exposure & Exposure Profile\n"
-                f"- **Unbilled Deposit Count**: **{len(missing_excs)} transactions**\n"
-                f"- **Gateway Settlement State**: `{missing_excs[0].payment_status if missing_excs else 'settled'}`\n"
-                f"- **Balance Sheet Risk**: Cash is unapplied against accounts receivable, accumulating in suspense.\n\n"
-                f"| Transaction ID | Cleared Status | Gateway Status | Immediate Remediation |\n"
-                f"|---|---|---|---|\n"
-                + "\n".join([f"| `{r.transaction_id}` | Cleared | `{r.payment_status or 'settled'}` | Dispatch billing inquiry to AP & park in GL-2250 |" for r in missing_excs[:8]])
-                + (f"\n| *... and {len(missing_excs) - 8} more*" if len(missing_excs) > 8 else "")
-                + f"\n\n#### 🎯 Controller Remediation Steps\n"
-                f"1. **Dispatch Billing Inquiry**: Request sales/procurement teams to issue formal billing invoices.\n"
-                f"2. **Suspense Parking**: Record incoming funds in `GL-2250 (Unapplied Customer Receipts / Suspense)` to maintain clean ledger reconciliation without premature revenue recognition."
-            )
+RECONCILIATION SUMMARY STATS:
+{json.dumps(summary_context, indent=2)}
 
-        # -------------------------------------------------------------
-        # H. Duplicate Entries Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["duplicate", "duplicates", "double count", "double-counting", "redundant", "idempotency"]):
-            return (
-                f"### 🛡️ Forensic Audit: Duplicate Statement Entries ({len(dup_excs)})\n\n"
-                f"> **Integrity & Compliance Alert**: Identified and isolated **{len(dup_excs)} duplicate records** in the banking feed to protect the general ledger against phantom cash inflation and double-counting.\n\n"
-                f"#### 🔍 Quarantine & Risk Assessment\n"
-                f"- **Quarantined Count**: **{len(dup_excs)} records** (`TX0041_DUP` through `TX0050_DUP`)\n"
-                f"- **Root Cause**: Redundant CSV export batches, re-transmitted gateway settlement files, or duplicate webhook delivery.\n"
-                f"- **Ledger Action**: Isolated directly into `GL-1190 (Duplicate Batch Clearing)`.\n\n"
-                f"#### 💡 Systemic Prevention Playbook\n"
-                f"- Implement cryptographic idempotency keys (`SHA-256` hashing on `transaction_id + date + amount`) at the data ingestion gateway so redundant feeds are filtered before reaching reconciliation."
-            )
+INSTRUCTIONS:
+- Explain overall performance: {matched_count} of {clean_total} records ({clean_match_rate}%) matched cleanly.
+- Break down the exceptions: {amt_count} amount mismatches (₹{total_variance:,.0f} total variance), {date_count} timing offsets, and {missing_count} unbilled missing invoices.
+- State the single most critical priority for the controller to look at first.
+- Do NOT mention individual transaction IDs.
+- Keep the language clear, executive, and under 180 words.
+"""
 
-        # -------------------------------------------------------------
-        # I. Risk Assessment / Benchmark Accuracy Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["risk", "audit", "accuracy", "benchmark", "score", "ground truth", "compliance", "exposure"]):
-            clean_count = len(clean_matches)
-            clean_total = len(results) - len(dup_excs)
-            rate = round((clean_count / clean_total * 100), 1) if clean_total > 0 else 0.0
-            acc_pct = metrics.get("accuracy", 100.0) if metrics else 100.0
+    try:
+        return generate_gemini_content(
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=400),
+        )
+    except Exception as e:
+        if verbose:
+            print(f"  [AI Summary Fallback]: {e}")
+        return (
+            f"The reconciliation batch processed **{total_records} total records** with **{matched_count} clean matches** ({clean_match_rate}% match rate)"
+            + (f" and **{dup_count} quarantined duplicates**" if dup_count else "")
+            + f", leaving **{exceptions_count} exceptions requiring review**.\n\n"
+            f"**Exceptions Breakdown**:\n"
+            f"- **{amt_count} Price/Fee Variances**: Cumulative fee drag of ₹{total_variance:,.2f} from gateway interchange deductions (post to `GL-6150`).\n"
+            f"- **{date_count} Timing Delays**: Standard 2-day transit clearing offsets (safe to accept).\n"
+            f"- **{missing_count} Unbilled Deposits**: Bank cash lacking sales invoices (park in `GL-2250`).\n\n"
+            f"**Top Priority**: Review and park the {missing_count} unbilled cash receipts in suspense, then post batch journal entries for the {amt_count} gateway fee variances."
+        )
 
-            return (
-                f"### 🛡️ Audit Risk Assessment & Benchmark Accuracy Report\n\n"
-                f"> **Executive Audit Brief**: The portfolio exhibits a **{rate}% clean match rate** with an **autonomous reconciliation accuracy score of {acc_pct:.1f}%** across {len(results)} evaluated records.\n\n"
-                f"#### 📊 Multi-Factor Risk Stratification\n"
-                f"| Risk Tier | Record Count | Risk Driver | Audit & Controller Posture |\n"
-                f"|---|---|---|---|\n"
-                f"| **CRITICAL** | {len([r for r in missing_excs if getattr(r, 'payment_status', '') == 'pending'])} | High-value unbilled cash / unresolved variances | Immediate controller intervention required |\n"
-                f"| **HIGH** | {len(dup_excs) + len(missing_excs)} | Duplicates and unapplied deposits | Quarantined to GL-1190 / parked in GL-2250 |\n"
-                f"| **MEDIUM** | {len(amt_excs)} | Fee variances (2–3% interchange drag) | Post batch adjustment to GL-6150 |\n"
-                f"| **LOW** | {len(date_excs)} | Standard 2-day settlement clearing drift | Approved within 3-day policy tolerance |\n\n"
-                f"#### 💡 Audit Readiness Checklist\n"
-                f"- All {len(results)} records have full forensic trace keys and matched counterparty records.\n"
-                f"- Adjusting journal entries maintain perfect double-entry mathematical equilibrium."
-            )
 
-        # -------------------------------------------------------------
-        # J. Strategic CFO Advice / Recommendations / Action Plan Queries
-        # -------------------------------------------------------------
-        if any(k in q_lower for k in ["advice", "recommend", "recommendation", "next step", "what should", "how to improve", "action plan", "playbook", "strategy", "optimize", "workflow"]):
-            return (
-                f"### 💼 Strategic CFO Action Blueprint & Remediation Plan\n\n"
-                f"> **Executive Mandate**: A 4-pillar action plan designed to streamline reconciliation throughput, eliminate fee leakage, and ensure audit compliance.\n\n"
-                f"#### 🎯 4-Pillar Controller Execution Plan\n"
-                f"1. **Priority 1: Clear Unbilled Cash Deposits (GL-2250)**\n"
-                f"   - Dispatch automated billing requests to sales and procurement for the {len(missing_excs)} unbilled deposits (`TX0031`–`TX0040`) to convert suspense balances into recognized revenue.\n\n"
-                f"2. **Priority 2: Post Batch Gateway Fee Adjustments (GL-6150)**\n"
-                f"   - Book the **₹{total_variance:,.2f}** cumulative variance directly to `GL-6150 (Bank & Gateway Fees)` to close open receivables in `GL-1200` cleanly.\n\n"
-                f"3. **Priority 3: Automate 3-Day Settlement Drift Tolerances**\n"
-                f"   - Configure a 3-day date tolerance rule in the reconciler so standard multi-day clearing drifts are approved autonomously.\n\n"
-                f"4. **Priority 4: Negotiate Gateway Interchange Concessions**\n"
-                f"   - Leverage high transaction volume with primary payment gateways to negotiate 30–50 basis point reductions on merchant discount rates (MDR)."
-            )
+def explain_forecast(
+    forecast_df: pd.DataFrame,
+    verbose: bool = True,
+) -> str:
+    """
+    Explains the 30-day forward cash forecast in plain language.
+    Sends ONLY the forecast output summary.
+    """
+    if forecast_df is None or len(forecast_df) == 0:
+        raise ValueError("No cash forecast data available to explain.")
 
-        # -------------------------------------------------------------
-        # K. Natural Conversational / Catch-All Comprehensive Overview
-        # -------------------------------------------------------------
-        clean_count = len(clean_matches)
-        dup_count = len(dup_excs)
-        clean_total = len(results) - dup_count
-        rate = round((clean_count / clean_total * 100), 1) if clean_total > 0 else 0.0
-        exceptions_count = clean_total - clean_count
+    first_row = forecast_df.iloc[0]
+    last_row = forecast_df.iloc[-1]
+
+    start_bal = float(first_row.get("projected_balance", first_row.get("Projected_Cash_Base (₹)", 0.0)))
+    base_close = float(last_row.get("projected_balance", last_row.get("Projected_Cash_Base (₹)", 0.0)))
+    opt_close = float(last_row.get("optimistic_closing", last_row.get("Projected_Cash_Optimistic (₹)", 0.0)))
+    cons_close = float(last_row.get("conservative_closing", last_row.get("Projected_Cash_Conservative (₹)", 0.0)))
+    net_change = base_close - start_bal
+
+    forecast_context = {
+        "forecast_horizon_days": len(forecast_df),
+        "starting_cash_balance": start_bal,
+        "day_30_base_case_balance": base_close,
+        "day_30_optimistic_balance": opt_close,
+        "day_30_conservative_balance": cons_close,
+        "net_30_day_base_trajectory": net_change,
+        "optimistic_upside": opt_close - base_close,
+        "conservative_downside": base_close - cons_close,
+    }
+
+    prompt = f"""You are a Treasury Manager and Financial Controller. Explain this 30-day cash forecast in plain language — what's driving the optimistic/base/conservative spread, and what would most improve the base case.
+
+30-DAY FORECAST DATA:
+{json.dumps(forecast_context, indent=2)}
+
+INSTRUCTIONS:
+- Explain the projected 30-day liquidity trajectory from ₹{start_bal:,.0f} to base closing ₹{base_close:,.0f} (net change ₹{net_change:,.0f}).
+- Detail the drivers of the spread between the optimistic (₹{opt_close:,.0f}) and conservative (₹{cons_close:,.0f}) cases (clearing transit velocity, collection timing, recurring payables).
+- State the single most impactful recommendation to improve the base case (e.g. accelerating T+1 settlement cycles and resolving unbilled suspense deposits).
+- Keep the response clear, structured, and under 180 words.
+"""
+
+    try:
+        return generate_gemini_content(
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=400),
+        )
+    except Exception as e:
+        if verbose:
+            print(f"  [AI Forecast Fallback]: {e}")
+        return (
+            f"The 30-day cash forecast projects operating liquidity to move from **₹{start_bal:,.0f}** to a base closing balance of **₹{base_close:,.0f}** (net trajectory: **{'+' if net_change >= 0 else ''}₹{net_change:,.0f}**).\n\n"
+            f"**Spread Drivers**:\n"
+            f"- **Optimistic Case (₹{opt_close:,.0f})**: Assumes rapid customer payment velocity and prompt gateway settlements.\n"
+            f"- **Conservative Case (₹{cons_close:,.0f})**: Models weekend clearing holds and a 5-day collection transit lag.\n\n"
+            f"**Action to Improve Base Case**: Accelerate settlement clearing cycles with primary payment gateways from T+2 to T+1 and clear unbilled receivables parked in suspense."
+        )
+
+
+def explain_journal_entry(
+    entry_id: str,
+    journal_entries_df: pd.DataFrame,
+    verbose: bool = True,
+) -> str:
+    """
+    Explains a specific GL journal entry in plain language.
+    Sends ONLY that journal entry's debit and credit rows.
+    """
+    if journal_entries_df is None or len(journal_entries_df) == 0:
+        raise ValueError("No journal entries available to explain.")
+
+    entry_clean = str(entry_id).strip().upper()
+    matching = pd.DataFrame()
+
+    if "Journal_ID" in journal_entries_df.columns:
+        matching = journal_entries_df[journal_entries_df["Journal_ID"].astype(str).str.strip().str.upper() == entry_clean]
+    if len(matching) == 0 and "Transaction_ID" in journal_entries_df.columns:
+        matching = journal_entries_df[journal_entries_df["Transaction_ID"].astype(str).str.strip().str.upper() == entry_clean]
+
+    if len(matching) == 0:
+        raise ValueError(f"Journal entry '{entry_id}' not found.")
+
+    je_rows = matching.to_dict("records")
+    tot_debit = sum(float(r.get("Debit (₹)", r.get("debit", 0.0)) or 0.0) for r in je_rows)
+    tot_credit = sum(float(r.get("Credit (₹)", r.get("credit", 0.0)) or 0.0) for r in je_rows)
+
+    je_context = {
+        "journal_id": str(matching.iloc[0].get("Journal_ID", entry_id)),
+        "transaction_id": str(matching.iloc[0].get("Transaction_ID", "N/A")),
+        "date": str(matching.iloc[0].get("Date", "N/A")),
+        "lines": [
+            {
+                "account_code": r.get("Account_Code", r.get("account_code", "")),
+                "debit": float(r.get("Debit (₹)", r.get("debit", 0.0)) or 0.0),
+                "credit": float(r.get("Credit (₹)", r.get("credit", 0.0)) or 0.0),
+                "memo": r.get("Memo", r.get("memo", "")),
+            }
+            for r in je_rows
+        ],
+        "total_debit": tot_debit,
+        "total_credit": tot_credit,
+        "is_balanced": abs(tot_debit - tot_credit) < 0.01,
+    }
+
+    prompt = f"""You are a Lead Accounting Controller. Explain this GL journal entry in plain language — what it books and why.
+
+JOURNAL ENTRY DATA:
+{json.dumps(je_context, indent=2)}
+
+INSTRUCTIONS:
+- Explain what this specific double-entry adjusting entry ({je_context['journal_id']}) books (which accounts are debited and credited).
+- Explain why this adjustment is necessary to balance company books under GAAP.
+- Confirm that total debits (₹{tot_debit:,.2f}) equal total credits (₹{tot_credit:,.2f}).
+- Keep the response clear, concise, and under 150 words.
+"""
+
+    try:
+        return generate_gemini_content(
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=350),
+        )
+    except Exception as e:
+        if verbose:
+            print(f"  [AI Journal Fallback]: {e}")
+        lines_desc = []
+        for line in je_context["lines"]:
+            if line["debit"] > 0:
+                lines_desc.append(f"Debit `{line['account_code']}` for ₹{line['debit']:,.2f}")
+            if line["credit"] > 0:
+                lines_desc.append(f"Credit `{line['account_code']}` for ₹{line['credit']:,.2f}")
 
         return (
-            f"### 📊 Financial Controller Portfolio Overview & Strategic Briefing\n\n"
-            f"> **Executive Summary**: The autonomous financial intelligence agent has analyzed **{len(results)} total records** across banking feeds, invoicing ledgers, and settlement processors. The portfolio demonstrates an operational **{rate}% clean match rate** with **{exceptions_count} active exceptions** and **{dup_count} quarantined duplicates**.\n\n"
-            f"#### 📈 Reconciliation Ledger Status Matrix\n"
-            f"| Portfolio Category | Count | Proportion (%) | Primary Controller Stance |\n"
-            f"|---|---|---|---|\n"
-            f"| **Clean Matches** | **{clean_count}** | {rate}% | Verified 1:1 settlements ready for automated ledger posting |\n"
-            f"| **Amount Discrepancies** | **{len(amt_excs)}** | {len(amt_excs)/len(results)*100:.1f}% | Gateway fee deductions (~2.5%); post to `GL-6150` |\n"
-            f"| **Settlement Date Drift** | **{len(date_excs)}** | {len(date_excs)/len(results)*100:.1f}% | 2-day clearing lag; accept within policy tolerance |\n"
-            f"| **Unbilled Deposits** | **{len(missing_excs)}** | {len(missing_excs)/len(results)*100:.1f}% | Bank cash lacking invoice; park in `GL-2250` |\n"
-            f"| **Quarantined Duplicates** | **{dup_count}** | {dup_count/len(results)*100:.1f}% | Redundant records isolated to `GL-1190` |\n\n"
-            f"#### 💡 Interactive Copilot Capabilities\n"
-            f"You can ask me specific, deep-dive questions such as:\n"
-            f"- *\"Why did TX0004 fail?\"* or *\"Show the balanced journal entry for TX0002\"*\n"
-            f"- *\"How is Amazon Business performing?\"* or *\"Give me a counterparty breakdown\"*\n"
-            f"- *\"What is our 30-day cash forecast and runway?\"*\n"
-            f"- *\"What are the top CFO recommendations for month-end close?\"*\n"
-            f"- *\"Explain the double-entry GL adjustments required\"*"
+            f"Journal Entry **`{je_context['journal_id']}`** records an adjusting double-entry posting for transaction `{je_context['transaction_id']}`:\n\n"
+            + "\n".join(f"- {ld}" for ld in lines_desc) +
+            f"\n\n**Purpose**: Balances the ledger under GAAP by adjusting fee variances/reclassifications so Accounts Receivable equals physical bank cash (Total Debits: ₹{tot_debit:,.2f} = Total Credits: ₹{tot_credit:,.2f})."
         )
